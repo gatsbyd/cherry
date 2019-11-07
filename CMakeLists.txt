@@ -10,6 +10,8 @@ set(CXX_FLAGS
  -Werror
  -std=c++11
  -pthread
+ -ldl		#dlsym()
+ -lmelon
 )
 
 # ---[ Flags
@@ -20,6 +22,16 @@ include_directories(${PROJECT_SOURCE_DIR}/src)
 
 # ---[ Dependencies
 find_package(Threads REQUIRED)
+find_package(Protobuf REQUIRED)
+if(PROTOBUF_FOUND)
+   message(STATUS "protobuf library found")
+else()
+    message(FATAL_ERROR "protobuf library is needed but cant be found")
+endif()
+find_package(ZLIB REQUIRED)
+if (ZLIB_FOUND)
+    include_directories(${ZLIB_INCLUDE_DIRS})
+endif()
 
 # --[ Output directory
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -27,7 +39,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # ---[ Subdirectories
-add_subdirectory(test)
+#add_subdirectory(test)
 add_subdirectory(src)
 
 #message(STATUS "CMAKE_CXX_FLAGS=" "${CMAKE_CXX_FLAGS}")
