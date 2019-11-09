@@ -1,12 +1,21 @@
 #ifndef _CHERRY_RAFT_H_
 #define _CHERRY_RAFT_H_
 
-#include "Log.h"
+#include "args.pb.h"
 
+#include <atomic>
+#include <melon/Address.h>
+#include <melon/RpcServer.h>
+#include <melon/RpcClient.h>
+#include <melon/Thread.h>
+#include <google/protobuf/message.h>
+#include <memory>
 #include <stdint.h>
 #include <vector>
 
 namespace cherry {
+
+typedef std::shared_ptr<::google::protobuf::Message> MessagePtr;
 
 class Raft {
 public:
@@ -15,10 +24,19 @@ public:
 		Candidate,
 		Leader,
 	};
-	Raft();
 
-	bool start(Command::Ptr cmd);
-	
+	Raft(const std::vector<melon::rpc::RpcClient::Ptr>& peers, melon::IpAddress addr, melon::Scheduler* scheduler);
+	~Raft();
+
+	bool start(MessagePtr cmd);
+	void quit();
+
+private:
+	void raftLoop();
+	MessagePtr onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args);
+	MessagePtr onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args);
+	void sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args);
+	void sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs> append_args);
 
 private:
 	State state_;
@@ -34,6 +52,11 @@ private:
 	//valotile state on leaders
 	std::vector<uint32_t> next_index_;
 	std::vector<uint32_t> match_index_;
+
+	std::atomic_bool running_;
+	melon::rpc::RpcServer server_;
+	std::vector<melon::rpc::RpcClient::Ptr> peers_;
+	melon::Thread raft_loop_thread_;
 };
 
 

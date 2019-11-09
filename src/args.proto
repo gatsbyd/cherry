@@ -26,11 +26,19 @@ message RequestAppendArgs {
 	required uint32 pre_log_index = 3;
 	required uint32 pre_log_term = 4;
 	required uint32 leader_commit = 5;
-	required LogEntry entries = 6;
+	repeated LogEntry entries = 6;
 }
 
 message RequestAppendReply {
 	required uint32 term = 1;
 	required bool success = 2;
+}
+
+message KvCommnad {
+	required string operation = 1;
+	required string key = 2;
+	required string value = 3;
+	required int64 cid = 4;
+	required uint32 seq = 5;
 }
 
