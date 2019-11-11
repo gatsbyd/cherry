@@ -3,12 +3,13 @@
 
 #include "args.pb.h"
 
-#include <atomic>
 #include <melon/Address.h>
+#include <melon/Mutex.h>
 #include <melon/RpcServer.h>
 #include <melon/RpcClient.h>
 #include <melon/Thread.h>
 #include <google/protobuf/message.h>
+#include <atomic>
 #include <memory>
 #include <stdint.h>
 #include <vector>
@@ -32,7 +33,10 @@ public:
 	void quit();
 
 private:
+	void resetLeaderState();
 	void raftLoop();
+
+	//rpc
 	MessagePtr onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args);
 	MessagePtr onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args);
 	void sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args);
@@ -57,6 +61,7 @@ private:
 	melon::rpc::RpcServer server_;
 	std::vector<melon::rpc::RpcClient::Ptr> peers_;
 	melon::Thread raft_loop_thread_;
+	melon::Mutex mutex_;
 };
 
 

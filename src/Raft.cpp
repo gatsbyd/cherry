@@ -19,6 +19,9 @@ Raft::Raft(const std::vector<melon::rpc::RpcClient::Ptr>& peers, melon::IpAddres
 		server_.registerRpcHandler<RequestAppendArgs>(std::bind(&Raft::onRequestAppendEntry, this, std::placeholders::_1));
 		raft_loop_thread_.start();
 		running_ = true;
+		//todo:read log_, voted_for_, current_term_ from persistent
+		
+		resetLeaderState();
 }
 
 Raft::~Raft() {
@@ -35,10 +38,28 @@ void Raft::quit() {
 	running_ = false;
 }
 
+void Raft::resetLeaderState() {
+	next_index_.clear();
+	match_index_.clear();
+	next_index_.insert(next_index_.begin(), peers_.size(), log_.size());
+	match_index_.insert(match_index_.begin(), peers_.size(), 0);
+}
+
 void Raft::raftLoop() {
 	while (running_) {
-		
-
+		State state;
+		{
+			melon::MutexGuard lock(mutex_);
+			state = state_;
+		}
+		switch (state) {
+			case Follower:
+				break;
+			case Candidate:
+				break;
+			case Leader:
+				break;
+		}
 	}
 }
 
