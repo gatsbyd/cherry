@@ -1,12 +1,15 @@
 #include "Raft.h"
 
+
+#include <melon/Log.h>
 #include <assert.h>
 #include <functional>
 
 namespace cherry {
 
-Raft::Raft(const std::vector<melon::rpc::RpcClient::Ptr>& peers, melon::IpAddress addr, melon::Scheduler* scheduler)
+Raft::Raft(const std::vector<melon::rpc::RpcClient::Ptr>& peers, uint32_t me, melon::IpAddress addr, melon::Scheduler* scheduler)
 	:state_(Follower),
+	me_(me),
 	current_term_(0),
 	voted_for_(-1),
 	commit_index_(0),
@@ -38,6 +41,8 @@ Raft::~Raft() {
 	chan_dispose(election_timer_chan_);
 	chan_dispose(grant_to_candidate_chan_);
 	chan_dispose(vote_result_chan_);
+	quit();
+	raft_loop_thread_.join();
 }
 
 bool Raft::start(MessagePtr cmd) {
@@ -60,6 +65,7 @@ void Raft::resetLeaderState() {
 void Raft::raftLoop() {
 	//TODO:
 	int milli_election_timeout = 1000;
+	int milli_heartbeat_interval = 200;
 	while (running_) {
 		State state;
 		{
@@ -83,23 +89,85 @@ void Raft::raftLoop() {
 						//do nothing
 						break;
 					case 2:
-						//TODO:become candidate
+						turnToCandidate();
 						break;
 				}
 				break;
 			}
 			case Candidate: {
+				scheduler_->addTask(std::bind(&Raft::poll, this), "raft poll");
+				scheduler_->runAfter(milli_election_timeout * 1000, 
+										std::make_shared<melon::Coroutine>([this](){
+													char message[] = "timeout";
+													chan_send(election_timer_chan_, message);
+												}));
+				chan_t* chans[4] = {append_chan_, grant_to_candidate_chan_, vote_result_chan_, election_timer_chan_};
+				void* msg;
+				switch (chan_select(chans, 4, &msg, nullptr, 0, nullptr)) {
+					case 0:
+						//do nothing
+						break;
+					case 1:
+						//do nothing
+						break;
+					case 2:
+						//do nothing
+						break;
+					case 3:
+						turnToCandidate();
+						break;
+				}
 				break;
 			}
 			case Leader: {
+				scheduler_->addTask(std::bind(&Raft::heartbeat, this), "raft poll");
+
+				scheduler_->runAfter(milli_heartbeat_interval * 1000, 
+										std::make_shared<melon::Coroutine>([this](){
+													char message[] = "timeout";
+													chan_send(election_timer_chan_, message);
+												}));
+				chan_t* chans[3] = {append_chan_, grant_to_candidate_chan_, heartbeat_timer_chan_};
+				void* msg;
+				switch (chan_select(chans, 3, &msg, nullptr, 0, nullptr)) {
+					case 0:
+						//do nothing
+						break;
+					case 1:
+						//do nothing
+						break;
+					case 2:
+						//do nothing
+						break;
+				}
 				break;
 			}
 		}
 	}
 }
 
+void Raft::turnToCandidate() {
+	{
+		melon::MutexGuard lock(mutex_);
+		state_ = Candidate;
+		current_term_ += 1;
+		voted_for_ = me_;
+	}
+	LOG_DEBUG << me_ << "become candidate";
+}
+
+void Raft::poll() {
+	//TODO:发起选举
+	LOG_DEBUG << "start poll";
+}
+
+void Raft::heartbeat() {
+	//TODO:拷贝日志
+	LOG_DEBUG << "heartbeat";
+}
+
 MessagePtr Raft::onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args) {
-	(void) vote_args;
+	(void)vote_args;
 	return nullptr;
 }
 

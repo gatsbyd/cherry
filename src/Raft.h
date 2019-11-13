@@ -27,7 +27,7 @@ public:
 		Leader,
 	};
 
-	Raft(const std::vector<melon::rpc::RpcClient::Ptr>& peers, melon::IpAddress addr, melon::Scheduler* scheduler);
+	Raft(const std::vector<melon::rpc::RpcClient::Ptr>& peers, uint32_t me, melon::IpAddress addr, melon::Scheduler* scheduler);
 	~Raft();
 
 	bool start(MessagePtr cmd);
@@ -36,6 +36,9 @@ public:
 private:
 	void resetLeaderState();
 	void raftLoop();
+	void turnToCandidate();
+	void poll();
+	void heartbeat();
 
 	//rpc
 	MessagePtr onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args);
@@ -45,6 +48,7 @@ private:
 
 private:
 	State state_;
+	uint32_t me_;
 	//persistent state on all servers
 	uint32_t current_term_;
 	int32_t voted_for_;
@@ -67,6 +71,7 @@ private:
 	chan_t* append_chan_;
 	chan_t* election_timer_chan_;
 	chan_t* grant_to_candidate_chan_;
+	chan_t* heartbeat_timer_chan_;
 	chan_t* vote_result_chan_;
 };
 }
