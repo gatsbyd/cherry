@@ -59,6 +59,7 @@ private:
 	std::vector<uint32_t> match_index_;
 
 	std::atomic_bool running_;
+	melon::Scheduler* scheduler_;
 	melon::rpc::RpcServer server_;
 	std::vector<melon::rpc::RpcClient::Ptr> peers_;
 	melon::Thread raft_loop_thread_;
@@ -68,7 +69,5 @@ private:
 	chan_t* grant_to_candidate_chan_;
 	chan_t* vote_result_chan_;
 };
-
-
 }
 #endif

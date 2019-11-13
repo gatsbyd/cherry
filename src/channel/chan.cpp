@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #undef __STRICT_ANSI__
 
 #ifdef __APPLE__
@@ -521,7 +520,7 @@ int chan_select(chan_t* recv_chans[], int recv_count, void** recv_out,
             pthread_mutex_unlock(&chan->select_mutex);
         }
         pthread_mutex_lock(&s_mu);
-        int ret = pthread_cond_wait(&s_cond, &s_mu);
+        pthread_cond_wait(&s_cond, &s_mu);
         pthread_mutex_unlock(&s_mu);
     }
 
@@ -586,7 +585,7 @@ static int chan_is_buffered(chan_t* chan)
 
 int chan_send_int32(chan_t* chan, int32_t data)
 {
-    int32_t* wrapped = malloc(sizeof(int32_t));
+    int32_t* wrapped = static_cast<int32_t*>(malloc(sizeof(int32_t)));
     if (!wrapped)
     {
         return -1;
@@ -606,7 +605,7 @@ int chan_send_int32(chan_t* chan, int32_t data)
 int chan_recv_int32(chan_t* chan, int32_t* data)
 {
     int32_t* wrapped = NULL;
-    int success = chan_recv(chan, (void*) &wrapped);
+    int success = chan_recv(chan, (void**) &wrapped);
     if (wrapped != NULL)
     {
         *data = *wrapped;
@@ -618,7 +617,7 @@ int chan_recv_int32(chan_t* chan, int32_t* data)
 
 int chan_send_int64(chan_t* chan, int64_t data)
 {
-    int64_t* wrapped = malloc(sizeof(int64_t));
+    int64_t* wrapped = static_cast<int64_t*>(malloc(sizeof(int64_t)));
     if (!wrapped)
     {
         return -1;
@@ -638,7 +637,7 @@ int chan_send_int64(chan_t* chan, int64_t data)
 int chan_recv_int64(chan_t* chan, int64_t* data)
 {
     int64_t* wrapped = NULL;
-    int success = chan_recv(chan, (void*) &wrapped);
+    int success = chan_recv(chan, (void**) &wrapped);
     if (wrapped != NULL)
     {
         *data = *wrapped;
@@ -650,7 +649,7 @@ int chan_recv_int64(chan_t* chan, int64_t* data)
 
 int chan_send_double(chan_t* chan, double data)
 {
-    double* wrapped = malloc(sizeof(double));
+    double* wrapped = static_cast<double*>(malloc(sizeof(double)));
     if (!wrapped)
     {
         return -1;
@@ -670,7 +669,7 @@ int chan_send_double(chan_t* chan, double data)
 int chan_recv_double(chan_t* chan, double* data)
 {
     double* wrapped = NULL;
-    int success = chan_recv(chan, (void*) &wrapped);
+    int success = chan_recv(chan, (void**) &wrapped);
     if (wrapped != NULL)
     {
         *data = *wrapped;
@@ -702,7 +701,7 @@ int chan_send_buf(chan_t* chan, void* data, size_t size)
 int chan_recv_buf(chan_t* chan, void* data, size_t size)
 {
     void* wrapped = NULL;
-    int success = chan_recv(chan, (void*) &wrapped);
+    int success = chan_recv(chan, (void**) &wrapped);
     if (wrapped != NULL)
     {
         memcpy(data, wrapped, size);

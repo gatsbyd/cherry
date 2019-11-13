@@ -12,6 +12,7 @@ Raft::Raft(const std::vector<melon::rpc::RpcClient::Ptr>& peers, melon::IpAddres
 	commit_index_(0),
 	last_applied_(0),
 	running_(false),
+	scheduler_(scheduler),
 	server_(addr, scheduler),
 	peers_(peers),
 	raft_loop_thread_(std::bind(&Raft::raftLoop, this), "raft loop") {
@@ -57,6 +58,8 @@ void Raft::resetLeaderState() {
 }
 
 void Raft::raftLoop() {
+	//TODO:
+	int milli_election_timeout = 1000;
 	while (running_) {
 		State state;
 		{
@@ -64,13 +67,33 @@ void Raft::raftLoop() {
 			state = state_;
 		}
 		switch (state) {
-			case Follower:
-
+			case Follower: {
+				scheduler_->runAfter(milli_election_timeout * 1000, 
+										std::make_shared<melon::Coroutine>([this](){
+													char message[] = "timeout";
+													chan_send(election_timer_chan_, message);
+												}));
+				chan_t* chans[3] = {append_chan_, grant_to_candidate_chan_, election_timer_chan_};
+				void* msg;
+				switch (chan_select(chans, 3, &msg, nullptr, 0, nullptr)) {
+					case 0:
+						//do nothing
+						break;
+					case 1:
+						//do nothing
+						break;
+					case 2:
+						//TODO:become candidate
+						break;
+				}
 				break;
-			case Candidate:
+			}
+			case Candidate: {
 				break;
-			case Leader:
+			}
+			case Leader: {
 				break;
+			}
 		}
 	}
 }

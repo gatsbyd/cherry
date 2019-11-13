@@ -1,5 +1,3 @@
-#define _GNU_SOURCE
-
 #ifdef __APPLE__
 #define _XOPEN_SOURCE
 #endif
