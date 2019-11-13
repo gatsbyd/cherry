@@ -19,13 +19,24 @@ Raft::Raft(const std::vector<melon::rpc::RpcClient::Ptr>& peers, melon::IpAddres
 		server_.registerRpcHandler<RequestAppendArgs>(std::bind(&Raft::onRequestAppendEntry, this, std::placeholders::_1));
 		raft_loop_thread_.start();
 		running_ = true;
+
+		chan_init_global();
+		append_chan_ = chan_init(0);
+		election_timer_chan_ = chan_init(0);
+		grant_to_candidate_chan_ = chan_init(0);
+		vote_result_chan_ = chan_init(0);
+
 		//todo:read log_, voted_for_, current_term_ from persistent
 		
 		resetLeaderState();
 }
 
 Raft::~Raft() {
-
+	chan_dispose_global();
+	chan_dispose(append_chan_);
+	chan_dispose(election_timer_chan_);
+	chan_dispose(grant_to_candidate_chan_);
+	chan_dispose(vote_result_chan_);
 }
 
 bool Raft::start(MessagePtr cmd) {
@@ -54,6 +65,7 @@ void Raft::raftLoop() {
 		}
 		switch (state) {
 			case Follower:
+
 				break;
 			case Candidate:
 				break;

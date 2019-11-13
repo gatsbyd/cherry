@@ -2,6 +2,7 @@
 #define _CHERRY_RAFT_H_
 
 #include "args.pb.h"
+#include "channel/chan.h"
 
 #include <melon/Address.h>
 #include <melon/Mutex.h>
@@ -62,6 +63,10 @@ private:
 	std::vector<melon::rpc::RpcClient::Ptr> peers_;
 	melon::Thread raft_loop_thread_;
 	melon::Mutex mutex_;
+	chan_t* append_chan_;
+	chan_t* election_timer_chan_;
+	chan_t* grant_to_candidate_chan_;
+	chan_t* vote_result_chan_;
 };
 
 
