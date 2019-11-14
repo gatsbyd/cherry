@@ -153,17 +153,17 @@ void Raft::turnToCandidate() {
 		current_term_ += 1;
 		voted_for_ = me_;
 	}
-	LOG_DEBUG << me_ << "become candidate";
+	LOG_INFO << me_ << "become candidate";
 }
 
 void Raft::poll() {
 	//TODO:发起选举
-	LOG_DEBUG << "start poll";
+	LOG_INFO << "start poll";
 }
 
 void Raft::heartbeat() {
 	//TODO:拷贝日志
-	LOG_DEBUG << "heartbeat";
+	LOG_INFO << "heartbeat";
 }
 
 MessagePtr Raft::onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args) {
