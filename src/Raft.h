@@ -36,14 +36,21 @@ public:
 private:
 	void resetLeaderState();
 	void raftLoop();
+	void turnToFollower(uint32_t);
 	void turnToCandidate();
+	void turnToLeader();
 	void poll();
 	void heartbeat();
+
+	uint32_t getLastEntryIndex() const;
+	const LogEntry& getLogEntryAt(uint32_t index) const;
+	bool isMoreUpToDate(uint32_t last_log_index, uint32_t last_log_term) const;
 
 	//rpc
 	MessagePtr onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args);
 	MessagePtr onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args);
 	void sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args);
+	void onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::shared_ptr<RequestVoteReply> vote_reply);
 	void sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs> append_args);
 
 private:
@@ -52,6 +59,7 @@ private:
 	//persistent state on all servers
 	uint32_t current_term_;
 	int32_t voted_for_;
+	uint32_t voted_gain_;
 	std::vector<LogEntry> log_;
 
 	//volatile state on all servers
@@ -68,10 +76,10 @@ private:
 	std::vector<melon::rpc::RpcClient::Ptr> peers_;
 	melon::Thread raft_loop_thread_;
 	melon::Mutex mutex_;
-	chan_t* append_chan_;
 	chan_t* election_timer_chan_;
-	chan_t* grant_to_candidate_chan_;
 	chan_t* heartbeat_timer_chan_;
+	chan_t* append_chan_;
+	chan_t* grant_to_candidate_chan_;
 	chan_t* vote_result_chan_;
 };
 }
