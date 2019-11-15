@@ -30,6 +30,7 @@ public:
 	Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon::IpAddress addr, melon::Scheduler* scheduler);
 	~Raft();
 
+	void start();
 	bool start(MessagePtr cmd);
 	void quit();
 

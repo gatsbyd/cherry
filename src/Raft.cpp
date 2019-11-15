@@ -22,9 +22,6 @@ Raft::Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon:
 	raft_loop_thread_(std::bind(&Raft::raftLoop, this), "raft loop") {
 		server_.registerRpcHandler<RequestVoteArgs>(std::bind(&Raft::onRequestVote, this, std::placeholders::_1));
 		server_.registerRpcHandler<RequestAppendArgs>(std::bind(&Raft::onRequestAppendEntry, this, std::placeholders::_1));
-		raft_loop_thread_.start();
-		running_ = true;
-
 		chan_init_global();
 		append_chan_ = chan_init(0);
 		election_timer_chan_ = chan_init(0);
@@ -44,6 +41,11 @@ Raft::~Raft() {
 	chan_dispose(vote_result_chan_);
 	quit();
 	raft_loop_thread_.join();
+}
+
+void Raft::start() {
+	raft_loop_thread_.start();
+	running_ = true;
 }
 
 bool Raft::start(MessagePtr cmd) {

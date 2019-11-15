@@ -30,9 +30,6 @@ public:
 		}
 	}
 
-
-
-
 private:
 	melon::rpc::RpcClient client;
 	bool connected_ = true;

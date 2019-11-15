@@ -14,6 +14,7 @@ int main() {
 	scheduler.startAsync();
 	std::vector<cherry::PolishedRpcClient::Ptr> peers;
 	cherry::Raft raft(peers, 0, IpAddress("127.0.0.1", 5000), &scheduler);
+	raft.start();
 	getchar();
 	return 0;
 }

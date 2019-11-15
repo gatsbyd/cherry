@@ -1,7 +1,10 @@
 #ifndef _CHERRY_CONFIG_H_
 #define _CHERRY_CONFIG_H_
 
+#include "../src/Raft.h"
+
 #include <vector>
+#include <map>
 
 namespace cherry {
 
@@ -9,12 +12,22 @@ class Raft;
 
 class Config {
 public:
-	Config(int n);
+	Config(uint32_t n, melon::Scheduler* scheduler);
+	void disconnection(uint32_t idx);
+	void connection(uint32_t idx);
+
+	uint32_t checkOnLeader();
+	uint32_t checkTerms();
+
+private:
+	std::shared_ptr<Raft> makeRaft(uint32_t idx, uint32_t n, melon::Scheduler* scheduler);
 	
 private:
- int n_;
- std::vector<Raft*> rafts;
-
+	uint32_t n_;
+	const std::string ip_;
+	int base_port_;
+	std::vector<std::shared_ptr<Raft>> rafts_;
+ 	std::map<int, std::vector<PolishedRpcClient::Ptr> > connections_;
 };
 
 }
