@@ -16,6 +16,8 @@ set(CXX_FLAGS
 string(REPLACE ";" " " CMAKE_CXX_FLAGS "${CXX_FLAGS}")
 
 # ---[ Includes
+set(GMOCK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/third_party/gmock)
+include_directories(${GMOCK_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 # ---[ Dependencies
