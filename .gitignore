@@ -3,6 +3,6 @@ CMakeFiles/
 *.cmake
 Makefile
 .ycm_extra_conf.py
-.swp
-.pb.cc
-.pb.h
+*.swp
+*.pb.cc
+*.pb.h
