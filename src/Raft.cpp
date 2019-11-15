@@ -7,7 +7,7 @@
 
 namespace cherry {
 
-Raft::Raft(const std::vector<melon::rpc::RpcClient::Ptr>& peers, uint32_t me, melon::IpAddress addr, melon::Scheduler* scheduler)
+Raft::Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon::IpAddress addr, melon::Scheduler* scheduler)
 	:state_(Follower),
 	me_(me),
 	current_term_(0),
@@ -254,9 +254,9 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 	return nullptr;
 }
 
-void Raft::sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args) {
+bool Raft::sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args) {
 	assert(server < peers_.size());
-	peers_[server]->Call<RequestVoteReply>(vote_args, std::bind(&Raft::onRequestVoteReply, this, vote_args, std::placeholders::_1));
+	return peers_[server]->Call<RequestVoteReply>(vote_args, std::bind(&Raft::onRequestVoteReply, this, vote_args, std::placeholders::_1));
 }
 
 void Raft::onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::shared_ptr<RequestVoteReply> vote_reply) {
@@ -284,10 +284,11 @@ void Raft::onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::s
 	}
 }
 
-void Raft::sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs> append_args) {
+bool Raft::sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs> append_args) {
 	//todo
 	(void) server;
 	(void) append_args;
+	return true;
 }
 
 

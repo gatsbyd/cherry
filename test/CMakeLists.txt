@@ -29,7 +29,7 @@ foreach(test_src ${test_srcs} )
 	message(STATUS "test_name=" "${test_name}")
 
 	# create executable
-	add_executable(${test_name} EXCLUDE_FROM_ALL ${test_src})
+	add_executable(${test_name} EXCLUDE_FROM_ALL ${test_src} ${PROJECT_SOURCE_DIR}/test/Config.cpp)
 
     # link libraries
     target_link_libraries(${test_name} cherry gtest)

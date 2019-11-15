@@ -3,11 +3,11 @@
 
 #include "args.pb.h"
 #include "channel/chan.h"
+#include "PolishedRpcClient.h"
 
 #include <melon/Address.h>
 #include <melon/Mutex.h>
 #include <melon/RpcServer.h>
-#include <melon/RpcClient.h>
 #include <melon/Thread.h>
 #include <google/protobuf/message.h>
 #include <atomic>
@@ -27,7 +27,7 @@ public:
 		Leader,
 	};
 
-	Raft(const std::vector<melon::rpc::RpcClient::Ptr>& peers, uint32_t me, melon::IpAddress addr, melon::Scheduler* scheduler);
+	Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon::IpAddress addr, melon::Scheduler* scheduler);
 	~Raft();
 
 	bool start(MessagePtr cmd);
@@ -49,9 +49,9 @@ private:
 	//rpc
 	MessagePtr onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args);
 	MessagePtr onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args);
-	void sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args);
+	bool sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args);
 	void onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::shared_ptr<RequestVoteReply> vote_reply);
-	void sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs> append_args);
+	bool sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs> append_args);
 
 private:
 	State state_;
@@ -73,7 +73,7 @@ private:
 	std::atomic_bool running_;
 	melon::Scheduler* scheduler_;
 	melon::rpc::RpcServer server_;
-	std::vector<melon::rpc::RpcClient::Ptr> peers_;
+	std::vector<PolishedRpcClient::Ptr> peers_;
 	melon::Thread raft_loop_thread_;
 	melon::Mutex mutex_;
 	chan_t* election_timer_chan_;
