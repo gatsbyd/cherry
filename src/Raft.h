@@ -33,6 +33,8 @@ public:
 	void start();
 	bool start(MessagePtr cmd);
 	void quit();
+	bool isLeader();
+	uint32_t term();
 
 private:
 	void resetLeaderState();

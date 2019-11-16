@@ -13,8 +13,8 @@ class Raft;
 class Config {
 public:
 	Config(uint32_t n, melon::Scheduler* scheduler);
-	void disconnection(uint32_t idx);
-	void connection(uint32_t idx);
+	void start();
+	void setConnection(uint32_t idx, bool connection);
 
 	uint32_t checkOnLeader();
 	uint32_t checkTerms();
@@ -27,7 +27,9 @@ private:
 	const std::string ip_;
 	int base_port_;
 	std::vector<std::shared_ptr<Raft>> rafts_;
+	std::vector<bool> raft_connected_;
  	std::map<int, std::vector<PolishedRpcClient::Ptr> > connections_;
+	
 };
 
 }

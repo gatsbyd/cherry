@@ -44,8 +44,8 @@ Raft::~Raft() {
 }
 
 void Raft::start() {
-	raft_loop_thread_.start();
 	running_ = true;
+	raft_loop_thread_.start();
 }
 
 bool Raft::start(MessagePtr cmd) {
@@ -56,6 +56,14 @@ bool Raft::start(MessagePtr cmd) {
 
 void Raft::quit() {
 	running_ = false;
+}
+
+bool Raft::isLeader() {
+	return state_ == Leader;
+}
+
+uint32_t Raft::term() {
+	return current_term_;
 }
 
 void Raft::resetLeaderState() {
