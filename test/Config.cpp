@@ -71,7 +71,7 @@ uint32_t Config::checkOnLeader() {
 		}
 		uint32_t last_term_with_leader = -1;
 		for (const auto& pair : leaders) {
-			EXPECT_EQ(1, pair.second.size());
+			EXPECT_EQ(1, static_cast<int>(pair.second.size()));
 			if (pair.first > last_term_with_leader) {
 				last_term_with_leader = pair.first;
 			}
