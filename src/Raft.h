@@ -48,14 +48,18 @@ private:
 	uint32_t getLastEntryIndex() const;
 	const LogEntry& getLogEntryAt(uint32_t index) const;
 	bool isMoreUpToDate(uint32_t last_log_index, uint32_t last_log_term) const;
+	void constructLog(size_t next_index, std::shared_ptr<RequestAppendArgs> append_args);
 
 	void consumeAndSet(chan_t* chan, char* messge);
-	//rpc
-	MessagePtr onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args);
-	MessagePtr onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args);
+	//vote rpc
 	bool sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args);
 	void onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::shared_ptr<RequestVoteReply> vote_reply);
+	MessagePtr onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args);
+
+	//append rpc
 	bool sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs> append_args);
+	void onRequestAppendReply(std::shared_ptr<RequestAppendArgs> append_args, std::shared_ptr<RequestAppendReply> append_reply);
+	MessagePtr onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args);
 
 private:
 	State state_;

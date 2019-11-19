@@ -114,13 +114,13 @@ void Raft::raftLoop() {
 				void* msg;
 				switch (chan_select(chans, 4, &msg, nullptr, 0, nullptr)) {
 					case 0:		//Candidate收到append rpc后,变为Follower
-						turnToFollower();
 						scheduler_->cancel(timer_id);
+						turnToFollower();
 						//TODO:persist
 						break;
 					case 1:			//Candidate成功给peer投一票后,自己变为Follower
-						turnToFollower();
 						scheduler_->cancel(timer_id);
+						turnToFollower();
 						//TODO:persist
 						break;
 					case 2:			//收到投票结果
@@ -167,32 +167,6 @@ void Raft::raftLoop() {
 	}
 }
 
-void Raft::turnToFollower() {
-	state_ = Follower;
-}
-
-void Raft::turnToCandidate() {
-	{
-		melon::MutexGuard lock(mutex_);
-		state_ = Candidate;
-		current_term_ += 1;
-		voted_for_ = me_;
-		voted_gain_ = 0;
-	}
-	LOG_INFO << me_ << " become candidate";
-}
-
-void Raft::turnToLeader() {
-	if (state_ != Candidate) {
-		return;
-	}
-	{
-		melon::MutexGuard lock(mutex_);
-		state_ = Leader;
-	}
-	resetLeaderState();
-}
-
 void Raft::poll() {
 	if (state_ != Candidate) {
 		return;
@@ -214,30 +188,32 @@ void Raft::poll() {
 	
 }
 
-void Raft::heartbeat() {
-	//TODO:拷贝日志
-	LOG_INFO << "heartbeat";
+bool Raft::sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args) {
+	assert(server < peers_.size());
+	return peers_[server]->Call<RequestVoteReply>(vote_args, 
+					std::bind(&Raft::onRequestVoteReply, this, vote_args, std::placeholders::_1));
 }
 
-uint32_t Raft::getLastEntryIndex() const {
-	return log_.size() - 1;
-}
+void Raft::onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::shared_ptr<RequestVoteReply> vote_reply) {
+	if (state_ != Candidate || vote_args->term() != current_term_) {
+		return;
+	}
 
-const LogEntry& Raft::getLogEntryAt(uint32_t index) const {
-	assert(index < log_.size());
-	return log_[index];
-}
+	if (current_term_ < vote_reply->term()) {
+		//turnToFollower();
+		current_term_ = vote_reply->term();
+		voted_for_ = -1;
+		consumeAndSet(vote_result_chan_, (char*)"failed");
+		return;
+	}
 
-bool Raft::isMoreUpToDate(uint32_t last_log_index, uint32_t last_log_term) const {
-	//TODO:
-	(void) last_log_index;
-	(void) last_log_term;
-	return false;
-}
-
-void Raft::consumeAndSet(chan_t* chan, char* message) {
-	//TODO:consume
-	chan_send(chan, message);
+	if (vote_reply->vote_granted()) {
+		voted_gain_++;
+		if (state_ == Candidate && voted_gain_ > (peers_.size() / 2)) {
+			//turnToLeader();
+			consumeAndSet(vote_result_chan_, (char*)"success");
+		}
+	}
 }
 
 MessagePtr Raft::onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args) {
@@ -268,45 +244,101 @@ MessagePtr Raft::onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args) {
 	return vote_reply;
 }
 
+void Raft::heartbeat() {
+	if (state_ != Leader) {
+		return;
+	}
+	for (size_t i = 0; i < peers_.size(); ++i) {
+		std::shared_ptr<RequestAppendArgs> append_args = std::make_shared<RequestAppendArgs>();
+		{
+			melon::MutexGuard lock(mutex_);
+			append_args->set_term(current_term_);
+			append_args->set_leader_id(me_);
+			int next_index = next_index_[i];
+			append_args->set_pre_log_index(next_index - 1);
+			append_args->set_pre_log_term(log_[next_index - 1].term());
+			append_args->set_leader_commit(commit_index_);
+			
+			constructLog(next_index, append_args);
+		}
+		if (i != me_) {
+			sendRequestAppend(i, append_args);
+		}
+	}
+}
+
+bool Raft::sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs> append_args) {
+	assert(server < peers_.size());
+	return peers_[server]->Call<RequestAppendReply>(append_args, 
+					std::bind(&Raft::onRequestAppendReply, this, append_args, std::placeholders::_1));
+}
+
+
+void Raft::onRequestAppendReply(std::shared_ptr<RequestAppendArgs> append_args, std::shared_ptr<RequestAppendReply> append_reply) {
+	//
+}
+
 MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args) {
 	//todo
 	(void)append_args;
 	return nullptr;
 }
 
-bool Raft::sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args) {
-	assert(server < peers_.size());
-	return peers_[server]->Call<RequestVoteReply>(vote_args, std::bind(&Raft::onRequestVoteReply, this, vote_args, std::placeholders::_1));
+void Raft::turnToFollower() {
+	state_ = Follower;
 }
 
-void Raft::onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::shared_ptr<RequestVoteReply> vote_reply) {
-	if (state_ != Candidate || vote_args->term() != current_term_) {
+void Raft::turnToCandidate() {
+	{
+		melon::MutexGuard lock(mutex_);
+		state_ = Candidate;
+		current_term_ += 1;
+		voted_for_ = me_;
+		voted_gain_ = 0;
+	}
+	LOG_INFO << me_ << " become candidate";
+}
+
+void Raft::turnToLeader() {
+	if (state_ != Candidate) {
 		return;
 	}
-
-	if (current_term_ < vote_reply->term()) {
-		//turnToFollower();
-		current_term_ = vote_reply->term();
-		voted_for_ = -1;
-		consumeAndSet(vote_result_chan_, (char*)"failed");
-		return;
+	{
+		melon::MutexGuard lock(mutex_);
+		state_ = Leader;
 	}
-
-	if (vote_reply->vote_granted()) {
-		voted_gain_++;
-		if (state_ == Candidate && voted_gain_ > (peers_.size() / 2)) {
-			//turnToLeader();
-			consumeAndSet(vote_result_chan_, (char*)"success");
-		}
-	}
+	resetLeaderState();
 }
 
-bool Raft::sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs> append_args) {
-	//todo
-	(void) server;
-	(void) append_args;
-	return true;
+uint32_t Raft::getLastEntryIndex() const {
+	return log_.size() - 1;
 }
 
+const LogEntry& Raft::getLogEntryAt(uint32_t index) const {
+	assert(index < log_.size());
+	return log_[index];
+}
+
+bool Raft::isMoreUpToDate(uint32_t last_log_index, uint32_t last_log_term) const {
+	//TODO:
+	(void) last_log_index;
+	(void) last_log_term;
+	return false;
+}
+
+void Raft::consumeAndSet(chan_t* chan, char* message) {
+	//TODO:consume
+	chan_send(chan, message);
+}
+
+void Raft::constructLog(size_t next_index, std::shared_ptr<RequestAppendArgs> append_args) {
+	for (size_t i = next_index; i < log_.size(); ++i) {
+		const LogEntry& originEntry = log_[i];
+		LogEntry* entry = append_args->add_entries();
+		entry->set_term(originEntry.term());
+		entry->set_index(originEntry.index());
+		entry->set_command(originEntry.command());
+	}
+}
 
 }
