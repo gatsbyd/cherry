@@ -39,7 +39,7 @@ public:
 private:
 	void resetLeaderState();
 	void raftLoop();
-	void turnToFollower(uint32_t);
+	void turnToFollower();
 	void turnToCandidate();
 	void turnToLeader();
 	void poll();
@@ -49,6 +49,7 @@ private:
 	const LogEntry& getLogEntryAt(uint32_t index) const;
 	bool isMoreUpToDate(uint32_t last_log_index, uint32_t last_log_term) const;
 
+	void consumeAndSet(chan_t* chan, char* messge);
 	//rpc
 	MessagePtr onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args);
 	MessagePtr onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args);
@@ -81,9 +82,9 @@ private:
 	melon::Mutex mutex_;
 	chan_t* election_timer_chan_;
 	chan_t* heartbeat_timer_chan_;
-	chan_t* append_chan_;
-	chan_t* grant_to_candidate_chan_;
-	chan_t* vote_result_chan_;
+	chan_t* append_chan_;			//收到心跳rpc后
+	chan_t* grant_to_candidate_chan_;	//给别的Candidate投了一票
+	chan_t* vote_result_chan_;		//某次选举有结果
 };
 }
 #endif

@@ -1,6 +1,5 @@
 #include "Raft.h"
 
-
 #include <melon/Log.h>
 #include <assert.h>
 #include <functional>
@@ -74,7 +73,6 @@ void Raft::resetLeaderState() {
 }
 
 void Raft::raftLoop() {
-	//TODO:
 	int milli_election_timeout = 300 + rand() % 201;		//range from 300-500ms
 	int milli_heartbeat_interval = 100;
 	while (running_) {
@@ -85,21 +83,21 @@ void Raft::raftLoop() {
 		}
 		switch (state) {
 			case Follower: {
-				scheduler_->runAfter(milli_election_timeout * 1000, 
-										std::make_shared<melon::Coroutine>([this](){
-													char message[] = "timeout";
-													chan_send(election_timer_chan_, message);
-												}));
+				int64_t timer_id = scheduler_->runAfter(milli_election_timeout * 1000, 
+														std::make_shared<melon::Coroutine>([this](){
+																consumeAndSet(election_timer_chan_, (char*)"");
+																}));
 				chan_t* chans[3] = {append_chan_, grant_to_candidate_chan_, election_timer_chan_};
 				void* msg;
+				//TODO:
 				switch (chan_select(chans, 3, &msg, nullptr, 0, nullptr)) {
-					case 0:		//收到append rpc
-						//TODO:取消定时
+					case 0:		//收到append rpc后继续保持Follower身份
+						scheduler_->cancel(timer_id);
 						break;
-					case 1:		//收到投票成功
-						//TODO:取消定时
+					case 1:		//成功给peer投一票后继续保持Follower身份
+						scheduler_->cancel(timer_id);
 						break;
-					case 2:		//选举超时
+					case 2:		//选举超时,变为Candidate
 						turnToCandidate();
 						break;
 				}
@@ -108,22 +106,33 @@ void Raft::raftLoop() {
 			case Candidate: {
 				scheduler_->addTask(std::bind(&Raft::poll, this), "raft poll");
 
-				scheduler_->runAfter(milli_election_timeout * 1000, 
-										std::make_shared<melon::Coroutine>([this](){
-													char message[] = "timeout";
-													chan_send(election_timer_chan_, message);
-												}));
+				int64_t timer_id = scheduler_->runAfter(milli_election_timeout * 1000, 
+														std::make_shared<melon::Coroutine>([this](){
+																consumeAndSet(election_timer_chan_, (char*)"");
+															}));
 				chan_t* chans[4] = {append_chan_, grant_to_candidate_chan_, vote_result_chan_, election_timer_chan_};
 				void* msg;
 				switch (chan_select(chans, 4, &msg, nullptr, 0, nullptr)) {
-					case 0:			//收到append rpc
-						//TODO:取消定时
+					case 0:		//Candidate收到append rpc后,变为Follower
+						turnToFollower();
+						scheduler_->cancel(timer_id);
+						//TODO:persist
 						break;
-					case 1:			//给别人投票成功
-						//TODO:取消定时
+					case 1:			//Candidate成功给peer投一票后,自己变为Follower
+						turnToFollower();
+						scheduler_->cancel(timer_id);
+						//TODO:persist
 						break;
 					case 2:			//收到投票结果
-						//TODO:取消定时
+						scheduler_->cancel(timer_id);
+						char message[10];
+						chan_recv(vote_result_chan_, (void**)&message);
+						if (strcmp(message, "success")) {
+							turnToLeader();
+						} else {
+							turnToFollower();
+						}
+						//TODO:persist
 						break;
 					case 3:
 						turnToCandidate();
@@ -134,19 +143,20 @@ void Raft::raftLoop() {
 			case Leader: {
 				scheduler_->addTask(std::bind(&Raft::heartbeat, this), "raft heartbeat");
 
-				scheduler_->runAfter(milli_heartbeat_interval * 1000, 
-										std::make_shared<melon::Coroutine>([this](){
-													char message[] = "timeout";
-													chan_send(election_timer_chan_, message);
-												}));
+				int64_t timer_id = scheduler_->runAfter(milli_heartbeat_interval * 1000, 
+															std::make_shared<melon::Coroutine>([this](){
+																		consumeAndSet(heartbeat_timer_chan_, (char*)"");
+																	}));
 				chan_t* chans[3] = {append_chan_, grant_to_candidate_chan_, heartbeat_timer_chan_};
 				void* msg;
 				switch (chan_select(chans, 3, &msg, nullptr, 0, nullptr)) {
 					case 0:		//收到append rpc
-						//TODO:取消定时
+						scheduler_->cancel(timer_id);
+						turnToFollower();
 						break;
 					case 1:		//给别人投票成功
-						//TODO:取消定时
+						scheduler_->cancel(timer_id);
+						turnToFollower();
 						break;
 					case 2:		//心跳间隔
 						break;
@@ -157,11 +167,8 @@ void Raft::raftLoop() {
 	}
 }
 
-void Raft::turnToFollower(uint32_t term) {
-	if (term > current_term_) {
-		state_ = Follower;
-		current_term_ = term;
-	}
+void Raft::turnToFollower() {
+	state_ = Follower;
 }
 
 void Raft::turnToCandidate() {
@@ -228,6 +235,11 @@ bool Raft::isMoreUpToDate(uint32_t last_log_index, uint32_t last_log_term) const
 	return false;
 }
 
+void Raft::consumeAndSet(chan_t* chan, char* message) {
+	//TODO:consume
+	chan_send(chan, message);
+}
+
 MessagePtr Raft::onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args) {
 	std::shared_ptr<RequestVoteReply> vote_reply = std::make_shared<RequestVoteReply>();
 	//第一种情况args.Term < rf.currentTerm:直接返回false
@@ -237,19 +249,17 @@ MessagePtr Raft::onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args) {
 	} else {
 		//第二种情况args.Term > rf.currentTerm:变为follower并且重置voteFor为空
 		if (vote_args->term() > current_term_) {
-			turnToFollower(vote_args->term());
+			current_term_ = vote_args->term();
+			//TODO:此时应该变为follower,用一个新的channel
+			consumeAndSet(append_chan_, (char*)"");
 			voted_for_ = -1;
-			//TODO:persist
 		}
 
 		vote_reply->set_term(current_term_);
 		if (voted_for_ == -1 && !isMoreUpToDate(vote_args->last_log_index(), vote_args->last_log_term())) {
 			voted_for_ = vote_args->candidate_id();		
-			//TODO::persist
-			//TODO:consume grant_to_candidate_chan_?
 			vote_reply->set_vote_granted(true);
-			char message[] = "vote to candidate";
-			chan_send(grant_to_candidate_chan_, message);
+			consumeAndSet(grant_to_candidate_chan_, (char*)"");
 		} else {
 			vote_reply->set_vote_granted(false);
 		}
@@ -275,21 +285,18 @@ void Raft::onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::s
 	}
 
 	if (current_term_ < vote_reply->term()) {
-		turnToFollower(vote_reply->term());
+		//turnToFollower();
+		current_term_ = vote_reply->term();
 		voted_for_ = -1;
-		//TODO:persist
-		char message[] = "vote failed";
-		chan_send(vote_result_chan_, message);
+		consumeAndSet(vote_result_chan_, (char*)"failed");
 		return;
 	}
 
 	if (vote_reply->vote_granted()) {
 		voted_gain_++;
 		if (state_ == Candidate && voted_gain_ > (peers_.size() / 2)) {
-			turnToLeader();
-			//TODO:persist
-			char message[] = "vote success";
-			chan_send(vote_result_chan_, message);
+			//turnToLeader();
+			consumeAndSet(vote_result_chan_, (char*)"success");
 		}
 	}
 }
