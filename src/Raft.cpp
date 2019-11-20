@@ -2,6 +2,7 @@
 
 #include <melon/Log.h>
 #include <assert.h>
+#include <sstream>
 #include <functional>
 
 namespace cherry {
@@ -30,9 +31,16 @@ Raft::Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon:
 		//todo:read log_, voted_for_, current_term_ from persistent
 		
 		resetLeaderState();
+
+		//Figure 2表明logs下标从1开始，所以添加一个空的Entry
+		LogEntry entry;
+		entry.set_term(0);
+		entry.set_index(0);
+		log_.push_back(entry);
 }
 
 Raft::~Raft() {
+	LOG_INFO << "~Raft()";
 	chan_dispose_global();
 	chan_dispose(append_chan_);
 	chan_dispose(election_timer_chan_);
@@ -55,6 +63,7 @@ bool Raft::start(MessagePtr cmd) {
 
 void Raft::quit() {
 	running_ = false;
+	LOG_INFO << toString() << " quit";
 }
 
 bool Raft::isLeader() {
@@ -76,6 +85,7 @@ void Raft::raftLoop() {
 	int milli_election_timeout = 300 + rand() % 201;		//range from 300-500ms
 	int milli_heartbeat_interval = 100;
 	while (running_) {
+		LOG_INFO << toString() << " loop";
 		State state;
 		{
 			melon::MutexGuard lock(mutex_);
@@ -179,6 +189,7 @@ void Raft::poll() {
 		vote_args->set_candidate_id(me_);
 		vote_args->set_last_log_term(getLogEntryAt(getLastEntryIndex()).term());
 		vote_args->set_last_log_index(getLastEntryIndex());
+		LOG_INFO << toString() << " send vote rpc";
 	}
 	for (size_t i = 0; i < peers_.size(); ++i) {
 		if (i != me_) {
@@ -227,7 +238,9 @@ MessagePtr Raft::onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args) {
 		if (vote_args->term() > current_term_) {
 			current_term_ = vote_args->term();
 			//TODO:此时应该变为follower,用一个新的channel
-			consumeAndSet(append_chan_, (char*)"");
+			if (state_ != Follower) {
+				consumeAndSet(append_chan_, (char*)"");
+			}
 			voted_for_ = -1;
 		}
 
@@ -275,13 +288,37 @@ bool Raft::sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs>
 
 
 void Raft::onRequestAppendReply(std::shared_ptr<RequestAppendArgs> append_args, std::shared_ptr<RequestAppendReply> append_reply) {
-	//
+	(void) append_args;
+	if (append_reply->success()) {
+		//TODO:成功后更新leader的nextIndex和matchIndex，并且更新commitIndex
+	} else { //返回false有两种原因:1.出现term比当前server大的， 2.参数中的PreLogIndex对应的Term和目标server中index对应的Term不一致
+		if (current_term_ < append_reply->term()) {
+			if (state_ == Leader) {
+				//TODO:此时应该变为follower,用一个新的channel
+				consumeAndSet(append_chan_, (char*)"");
+			}
+			turnToFollower();
+			voted_for_ = -1;
+		}
+		//TODO:第二种情况
+	}
 }
 
 MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args) {
-	//todo
-	(void)append_args;
-	return nullptr;
+	std::shared_ptr<RequestAppendReply> append_reply = std::make_shared<RequestAppendReply>();
+	if (append_args->term() < current_term_) {
+		append_reply->set_term(current_term_);
+		append_reply->set_success(false);
+	} else {
+		if (append_args->term() > current_term_) {
+			voted_for_ = -1;
+		}
+		consumeAndSet(append_chan_, (char*)"");
+				append_reply->set_term(current_term_);
+		append_reply->set_success(true);
+	}
+
+	return append_reply;
 }
 
 void Raft::turnToFollower() {
@@ -339,6 +376,22 @@ void Raft::constructLog(size_t next_index, std::shared_ptr<RequestAppendArgs> ap
 		entry->set_index(originEntry.index());
 		entry->set_command(originEntry.command());
 	}
+}
+
+std::string Raft::stateString() {
+	if (state_ == Follower) {
+		return "Follower";
+	} else if (state_ == Candidate) {
+		return "Candidate";
+	} else {
+		return "Leader";
+	}
+}
+
+std::string Raft::toString() {
+	std::ostringstream os;
+	os << "server(id=" << me_ << ", state=" << stateString() << ", term=" << current_term_;
+	return os.str();
 }
 
 }
