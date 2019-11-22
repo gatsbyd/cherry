@@ -26,7 +26,7 @@ std::shared_ptr<Raft> Config::makeRaft(uint32_t idx, uint32_t n, melon::Schedule
 	}
 	connections_[idx] = peers;
 
-	melon::IpAddress addr(ip_, base_port_ + idx);
+	melon::IpAddress addr(base_port_ + idx);
 	std::shared_ptr<Raft> raft = std::make_shared<Raft>(peers, idx, addr, scheduler);
 	return raft;
 }

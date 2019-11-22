@@ -22,6 +22,7 @@ Raft::Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon:
 	raft_loop_thread_(std::bind(&Raft::raftLoop, this), "raft loop") {
 		server_.registerRpcHandler<RequestVoteArgs>(std::bind(&Raft::onRequestVote, this, std::placeholders::_1));
 		server_.registerRpcHandler<RequestAppendArgs>(std::bind(&Raft::onRequestAppendEntry, this, std::placeholders::_1));
+		server_.start();
 		chan_init_global();
 		append_chan_ = chan_init(0);
 		election_timer_chan_ = chan_init(0);
@@ -63,7 +64,7 @@ bool Raft::start(MessagePtr cmd) {
 
 void Raft::quit() {
 	running_ = false;
-	LOG_INFO << toString() << " quit";
+	LOG_INFO << toString() << " :quit";
 }
 
 bool Raft::isLeader() {
@@ -85,7 +86,7 @@ void Raft::raftLoop() {
 	int milli_election_timeout = 300 + rand() % 201;		//range from 300-500ms
 	int milli_heartbeat_interval = 100;
 	while (running_) {
-		LOG_INFO << toString() << " loop";
+		LOG_INFO << toString() << " :loop";
 		State state;
 		{
 			melon::MutexGuard lock(mutex_);
@@ -95,7 +96,9 @@ void Raft::raftLoop() {
 			case Follower: {
 				int64_t timer_id = scheduler_->runAfter(milli_election_timeout * 1000, 
 														std::make_shared<melon::Coroutine>([this](){
-																consumeAndSet(election_timer_chan_, (char*)"");
+																	LOG_INFO << "election timeout, before send chan";
+																	consumeAndSet(election_timer_chan_, (char*)"");
+																	LOG_INFO << "election timeout, after send chan";
 																}));
 				chan_t* chans[3] = {append_chan_, grant_to_candidate_chan_, election_timer_chan_};
 				void* msg;
@@ -118,7 +121,9 @@ void Raft::raftLoop() {
 
 				int64_t timer_id = scheduler_->runAfter(milli_election_timeout * 1000, 
 														std::make_shared<melon::Coroutine>([this](){
+																LOG_INFO << "election timeout, before send chan";
 																consumeAndSet(election_timer_chan_, (char*)"");
+																LOG_INFO << "election timeout, after send chan";
 															}));
 				chan_t* chans[4] = {append_chan_, grant_to_candidate_chan_, vote_result_chan_, election_timer_chan_};
 				void* msg;
@@ -135,13 +140,6 @@ void Raft::raftLoop() {
 						break;
 					case 2:			//收到投票结果
 						scheduler_->cancel(timer_id);
-						char message[10];
-						chan_recv(vote_result_chan_, (void**)&message);
-						if (strcmp(message, "success")) {
-							turnToLeader();
-						} else {
-							turnToFollower();
-						}
 						//TODO:persist
 						break;
 					case 3:
@@ -189,7 +187,7 @@ void Raft::poll() {
 		vote_args->set_candidate_id(me_);
 		vote_args->set_last_log_term(getLogEntryAt(getLastEntryIndex()).term());
 		vote_args->set_last_log_index(getLastEntryIndex());
-		LOG_INFO << toString() << " send vote rpc";
+		LOG_INFO << toString() << " :send vote rpc";
 	}
 	for (size_t i = 0; i < peers_.size(); ++i) {
 		if (i != me_) {
@@ -206,33 +204,38 @@ bool Raft::sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vot
 }
 
 void Raft::onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::shared_ptr<RequestVoteReply> vote_reply) {
+	LOG_INFO << toString() << " :onRequestVoteReply";
 	if (state_ != Candidate || vote_args->term() != current_term_) {
 		return;
 	}
 
 	if (current_term_ < vote_reply->term()) {
-		//turnToFollower();
+		turnToFollower();
 		current_term_ = vote_reply->term();
 		voted_for_ = -1;
-		consumeAndSet(vote_result_chan_, (char*)"failed");
+		consumeAndSet(vote_result_chan_, (char*)"");
+		LOG_INFO << toString() << " failed to election";
 		return;
 	}
 
 	if (vote_reply->vote_granted()) {
 		voted_gain_++;
 		if (state_ == Candidate && voted_gain_ > (peers_.size() / 2)) {
-			//turnToLeader();
-			consumeAndSet(vote_result_chan_, (char*)"success");
+			LOG_INFO << toString() << " :become leader";
+			turnToLeader();
+			consumeAndSet(vote_result_chan_, (char*)"");
 		}
 	}
 }
 
 MessagePtr Raft::onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args) {
+	LOG_INFO << toString() << " onRequestVote";
 	std::shared_ptr<RequestVoteReply> vote_reply = std::make_shared<RequestVoteReply>();
 	//第一种情况args.Term < rf.currentTerm:直接返回false
 	if (vote_args->term() < current_term_) {
 		vote_reply->set_term(current_term_);
 		vote_reply->set_vote_granted(false);
+		LOG_INFO << toString() << " rejected " << vote_args->candidate_id() << "'s vote request, args.term=" << vote_args->term();
 	} else {
 		//第二种情况args.Term > rf.currentTerm:变为follower并且重置voteFor为空
 		if (vote_args->term() > current_term_) {
@@ -249,8 +252,10 @@ MessagePtr Raft::onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args) {
 			voted_for_ = vote_args->candidate_id();		
 			vote_reply->set_vote_granted(true);
 			consumeAndSet(grant_to_candidate_chan_, (char*)"");
+			LOG_INFO << toString() << " vote for " << vote_args->candidate_id();
 		} else {
 			vote_reply->set_vote_granted(false);
+			LOG_INFO << toString() << " rejected " << vote_args->candidate_id() << "'s vote request, vote_for=" << voted_for_;
 		}
 	}
 
@@ -333,17 +338,14 @@ void Raft::turnToCandidate() {
 		voted_for_ = me_;
 		voted_gain_ = 0;
 	}
-	LOG_INFO << me_ << " become candidate";
+	LOG_INFO << toString() << " :become candidate";
 }
 
 void Raft::turnToLeader() {
 	if (state_ != Candidate) {
 		return;
 	}
-	{
-		melon::MutexGuard lock(mutex_);
-		state_ = Leader;
-	}
+	state_ = Leader;
 	resetLeaderState();
 }
 
@@ -390,7 +392,7 @@ std::string Raft::stateString() {
 
 std::string Raft::toString() {
 	std::ostringstream os;
-	os << "server(id=" << me_ << ", state=" << stateString() << ", term=" << current_term_;
+	os << "server(id=" << me_ << ", state=" << stateString() << ", term=" << current_term_ << ")";
 	return os.str();
 }
 
