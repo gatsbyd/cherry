@@ -85,6 +85,16 @@ int Config::checkOnLeader() {
 	return -1;
 }
 
+// check that there's no leader
+void Config::checkNoLeader() {
+	for (uint32_t idx = 0; idx < n_; ++idx) {
+		if (raft_connected_[idx]) {
+			bool is_leader = rafts_[idx]->isLeader();
+			EXPECT_TRUE(!is_leader);
+		}
+	}
+}
+
 uint32_t Config::checkTerms() {
 	uint32_t term = 0;
 	for (uint32_t idx = 0; idx < n_; ++idx) {
