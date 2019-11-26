@@ -89,7 +89,6 @@ void Raft::onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::s
 	} else if (vote_reply->vote_granted() && state_ == Candidate && vote_args->term() == current_term_) {
 		voted_gain_++;
 		if (voted_gain_ > (peers_.size() / 2)) {
-			LOG_INFO << toString() << " :become leader";
 			turnToLeader();
 		}
 	}
@@ -144,6 +143,7 @@ void Raft::heartbeat() {
 			sendRequestAppend(i, append_args);
 		}
 	}
+	LOG_INFO << toString() << " :send append rpc";
 }
 
 bool Raft::sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs> append_args) {
@@ -165,6 +165,7 @@ void Raft::onRequestAppendReply(std::shared_ptr<RequestAppendArgs> append_args, 
 }
 
 MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args) {
+	LOG_INFO << toString() << " :recevie append rpc from " << append_args->leader_id();
 	std::shared_ptr<RequestAppendReply> append_reply = std::make_shared<RequestAppendReply>();
 	if (append_args->term() < current_term_) {
 		append_reply->set_term(current_term_);
@@ -190,6 +191,7 @@ void Raft::turnToFollower(uint32_t term) {
 		LOG_INFO << toString() << " :cancel timeout_id " << timeout_id_;
 	}
 	state_ = Follower;
+	LOG_INFO << toString() << " :become Follower";
 	current_term_ = term;
 	voted_for_ = -1;
 	voted_gain_ = 0;
@@ -206,7 +208,7 @@ void Raft::turnToCandidate() {
 		voted_for_ = me_;
 		voted_gain_ = 1;
 	}
-	LOG_INFO << toString() << " :become candidate";
+	LOG_INFO << toString() << " :become Candidate";
 	poll();
 	timeout_id_ = scheduler_->runAfter(getElectionTimeout() * 1000, 
 										std::make_shared<melon::Coroutine>(std::bind(&Raft::turnToCandidate, this)));
@@ -217,6 +219,7 @@ void Raft::turnToLeader() {
 	scheduler_->cancel(timeout_id_);
 	LOG_INFO << toString() << " :cancel timeout_id " << timeout_id_;
 	state_ = Leader;
+	LOG_INFO << toString() << " :become Leader";
 	resetLeaderState();
 	heartbeat();
 	hearbeat_id_ = scheduler_->runEvery(heartbeat_interval_ * 1000,

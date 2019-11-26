@@ -16,7 +16,7 @@ public:
 	void start();
 	void setConnection(uint32_t idx, bool connection);
 
-	uint32_t checkOnLeader();
+	int checkOnLeader();
 	uint32_t checkTerms();
 
 private:

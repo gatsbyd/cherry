@@ -54,7 +54,7 @@ void Config::setConnection(uint32_t idx, bool connection) {
 }
 
 //check have one and only one leader in a term
-uint32_t Config::checkOnLeader() {
+int Config::checkOnLeader() {
 	for (int iter = 0; iter < 10; ++iter) {
 		int ms = 450 + rand() % 100;
 		usleep(ms * 1000);
@@ -69,7 +69,7 @@ uint32_t Config::checkOnLeader() {
 				}
 			}
 		}
-		uint32_t last_term_with_leader = -1;
+		uint32_t last_term_with_leader = 0;
 		for (const auto& pair : leaders) {
 			EXPECT_EQ(1, static_cast<int>(pair.second.size()));
 			if (pair.first > last_term_with_leader) {
@@ -77,7 +77,8 @@ uint32_t Config::checkOnLeader() {
 			}
 		}
 		if (leaders.size() != 0) {
-			return leaders[last_term_with_leader][0];
+			LOG_INFO << "last_term_with_leader=" << last_term_with_leader;
+			return static_cast<int>(leaders[last_term_with_leader][0]);
 		}
 	}
 	EXPECT_TRUE(false);
