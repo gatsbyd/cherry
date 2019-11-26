@@ -38,8 +38,7 @@ public:
 
 private:
 	void resetLeaderState();
-	void raftLoop();
-	void turnToFollower();
+	void turnToFollower(uint32_t term);
 	void turnToCandidate();
 	void turnToLeader();
 	void poll();
@@ -51,8 +50,8 @@ private:
 	void constructLog(size_t next_index, std::shared_ptr<RequestAppendArgs> append_args);
 	std::string stateString();
 	std::string toString();
+	int getElectionTimeout();
 
-	void consumeAndSet(chan_t* chan, char* messge);
 	//vote rpc
 	bool sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args);
 	void onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::shared_ptr<RequestVoteReply> vote_reply);
@@ -84,13 +83,10 @@ private:
 	melon::Scheduler* scheduler_;
 	melon::rpc::RpcServer server_;
 	std::vector<PolishedRpcClient::Ptr> peers_;
-	melon::Thread raft_loop_thread_;
 	melon::Mutex mutex_;
-	chan_t* election_timer_chan_;
-	chan_t* heartbeat_timer_chan_;
-	chan_t* append_chan_;			//收到心跳rpc后
-	chan_t* grant_to_candidate_chan_;	//给别的Candidate投了一票
-	chan_t* vote_result_chan_;		//某次选举有结果
+	int heartbeat_interval_;
+	int64_t timeout_id_;
+	int64_t hearbeat_id_;
 };
 }
 #endif

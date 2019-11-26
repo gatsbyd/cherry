@@ -17,7 +17,7 @@ int main() {
 	chan_init_global();
 	chan_t* timeout_chan_ = chan_init(0);
 	chan_t* append_chan_ = chan_init(0);
-	int64_t timer_id = scheduler.runAfter(1 * 1000 * 1000, std::make_shared<Coroutine>([=](){
+	int64_t timer_id = scheduler.runAfter(500, std::make_shared<Coroutine>([=](){
 								printf("chan_send timeout\n");
 								chan_send(timeout_chan_, (char*)"timeout");						
 							}));

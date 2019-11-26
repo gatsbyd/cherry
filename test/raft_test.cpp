@@ -19,9 +19,6 @@ TEST(raft_test, TestInitialElection) {
 	Config cfg(servers, &scheduler);
 	cfg.start();
 
-	getchar();
-
-	/**
 	cfg.checkOnLeader();
 	LOG_INFO << "1";
 
@@ -37,8 +34,6 @@ TEST(raft_test, TestInitialElection) {
 
 	cfg.checkOnLeader();
 	LOG_INFO << "4";
-	**/
-
 }
 
 }
