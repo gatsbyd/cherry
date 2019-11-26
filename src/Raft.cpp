@@ -184,8 +184,10 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 void Raft::turnToFollower(uint32_t term) {
 	if (state_ == Leader) {
 		scheduler_->cancel(hearbeat_id_);
+		LOG_INFO << toString() << " :cancel hearbeat_id " << hearbeat_id_;
 	} else {
 		scheduler_->cancel(timeout_id_);
+		LOG_INFO << toString() << " :cancel timeout_id " << timeout_id_;
 	}
 	state_ = Follower;
 	current_term_ = term;
@@ -193,6 +195,7 @@ void Raft::turnToFollower(uint32_t term) {
 	voted_gain_ = 0;
 	timeout_id_ = scheduler_->runAfter(getElectionTimeout() * 1000, 
 							std::make_shared<melon::Coroutine>(std::bind(&Raft::turnToCandidate, this)));
+	LOG_INFO << toString() << " :timeout_id " << timeout_id_;
 }
 
 void Raft::turnToCandidate() {
@@ -203,19 +206,22 @@ void Raft::turnToCandidate() {
 		voted_for_ = me_;
 		voted_gain_ = 1;
 	}
+	LOG_INFO << toString() << " :become candidate";
 	poll();
 	timeout_id_ = scheduler_->runAfter(getElectionTimeout() * 1000, 
 										std::make_shared<melon::Coroutine>(std::bind(&Raft::turnToCandidate, this)));
-	LOG_INFO << toString() << " :become candidate";
+	LOG_INFO << toString() << " :timeout_id " << timeout_id_;
 }
 
 void Raft::turnToLeader() {
 	scheduler_->cancel(timeout_id_);
+	LOG_INFO << toString() << " :cancel timeout_id " << timeout_id_;
 	state_ = Leader;
 	resetLeaderState();
 	heartbeat();
 	hearbeat_id_ = scheduler_->runEvery(heartbeat_interval_ * 1000,
 											std::make_shared<melon::Coroutine>(std::bind(&Raft::heartbeat, this)));
+	LOG_INFO << toString() << " :hearbeat_id " << hearbeat_id_;
 }
 
 bool Raft::isLeader() {
