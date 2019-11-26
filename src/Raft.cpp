@@ -171,9 +171,7 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 		append_reply->set_term(current_term_);
 		append_reply->set_success(false);
 	} else {
-		if (append_args->term() > current_term_) {
-			turnToFollower(append_args->term());
-		}
+		turnToFollower(append_args->term());
 		//TODO:
 		append_reply->set_term(current_term_);
 		append_reply->set_success(true);
