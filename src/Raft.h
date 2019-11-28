@@ -49,13 +49,14 @@ private:
 
 	uint32_t getLastEntryIndex() const;
 	const LogEntry& getLogEntryAt(uint32_t index) const;
-	bool isMoreUpToDate(uint32_t last_log_index, uint32_t last_log_term) const;
+	bool thisIsMoreUpToDate(uint32_t last_log_index, uint32_t last_log_term) const;
 	void constructLog(size_t next_index, std::shared_ptr<RequestAppendArgs> append_args);
 	std::string stateString();
 	std::string toString();
 	int getElectionTimeout();
 	void applyLogs();
 	void defaultApplyFunc(LogEntry);
+	void updateCommitIndex();
 
 	//vote rpc
 	bool sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args);

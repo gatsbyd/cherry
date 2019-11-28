@@ -77,7 +77,6 @@ int Config::checkOnLeader() {
 			}
 		}
 		if (leaders.size() != 0) {
-			LOG_INFO << "last_term_with_leader=" << last_term_with_leader;
 			return static_cast<int>(leaders[last_term_with_leader][0]);
 		}
 	}

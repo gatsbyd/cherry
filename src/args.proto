@@ -32,6 +32,8 @@ message RequestAppendArgs {
 message RequestAppendReply {
 	required uint32 term = 1;
 	required bool success = 2;
+	required uint32 conflict_index = 3;
+	required uint32 conflict_term = 4;
 }
 
 message KvCommnad {

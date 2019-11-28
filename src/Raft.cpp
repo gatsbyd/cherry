@@ -20,7 +20,7 @@ Raft::Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon:
 	server_(addr, scheduler),
 	peers_(peers),
 	heartbeat_interval_(100),
-	apply_func_(std::bind(&Raft::defaultApplyFunc, this)) {
+	apply_func_(std::bind(&Raft::defaultApplyFunc, this, std::placeholders::_1)) {
 		server_.registerRpcHandler<RequestVoteArgs>(std::bind(&Raft::onRequestVote, this, std::placeholders::_1));
 		server_.registerRpcHandler<RequestAppendArgs>(std::bind(&Raft::onRequestAppendEntry, this, std::placeholders::_1));
 		server_.start();
@@ -120,7 +120,8 @@ MessagePtr Raft::onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args) {
 		}
 
 		vote_reply->set_term(current_term_);
-		if (voted_for_ == -1 && !isMoreUpToDate(vote_args->last_log_index(), vote_args->last_log_term())) {
+		//选举限制，见论文5.4节
+		if (voted_for_ == -1 && !thisIsMoreUpToDate(vote_args->last_log_index(), vote_args->last_log_term())) {
 			voted_for_ = vote_args->candidate_id();		
 			vote_reply->set_vote_granted(true);
 			LOG_INFO << toString() << " vote for " << vote_args->candidate_id();
@@ -164,14 +165,40 @@ bool Raft::sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs>
 }
 
 void Raft::onRequestAppendReply(std::shared_ptr<RequestAppendArgs> append_args, std::shared_ptr<RequestAppendReply> append_reply) {
-	(void) append_args;
+	if (state_ != Leader && current_term_ != append_args->term()) {
+		return;
+	}
+	int server_id = append_args->leader_id();
 	if (append_reply->success()) {
-		//TODO:成功后更新leader的nextIndex和matchIndex，并且更新commitIndex
+		//成功后更新leader的nextIndex和matchIndex，并且更新commitIndex
+		match_index_[server_id] = append_args->pre_log_index() + append_args->entries_size();
+		next_index_[server_id] = match_index_[server_id] + 1;
+		updateCommitIndex();
 	} else { //返回false有两种原因:1.出现term比当前server大的， 2.参数中的PreLogIndex对应的Term和目标server中index对应的Term不一致
 		if (current_term_ < append_reply->term()) {
 			turnToFollower(append_reply->term());
+		} else {
+			if (append_reply->conflict_term() == 0) {
+				next_index_[server_id] = append_reply->conflict_index();
+			} else {
+				uint32_t pre_log_index = append_args->pre_log_index();
+				while ((pre_log_index >= append_reply->conflict_index())
+								&& (log_[pre_log_index].term() != append_reply->conflict_term())) {
+					pre_log_index--;
+				}
+				next_index_[server_id] = pre_log_index + 1;
+			} 
+			uint32_t next_index = next_index_[server_id];
+			//调整log参数,重新发送append rpc
+			std::shared_ptr<RequestAppendArgs> new_args = std::make_shared<RequestAppendArgs>();
+			new_args->set_term(current_term_);
+			new_args->set_leader_id(me_);
+			new_args->set_pre_log_index(next_index - 1);
+			new_args->set_pre_log_term(log_[next_index - 1].term());
+			new_args->set_leader_commit(commit_index_);
+			constructLog(next_index, append_args);
+			sendRequestAppend(server_id, new_args);
 		}
-		//TODO:第二种情况
 	}
 }
 
@@ -199,10 +226,25 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 				}
 			}
 			LOG_INFO << toString() << " got entry from " << append_args->leader_id();
-		}
-		if (append_args->leader_commit() > commit_index_) {
-			commit_index_ = std::min(append_args->leader_commit(), getLastEntryIndex());
-			applyLogs();
+
+			if (append_args->leader_commit() > commit_index_) {
+				commit_index_ = std::min(append_args->leader_commit(), getLastEntryIndex());
+				applyLogs();
+			}
+		} else {
+			append_reply->set_success(false);
+			uint32_t pre_log_index = append_args->pre_log_index();
+			if (pre_log_index > getLastEntryIndex()) {
+				append_reply->set_conflict_index(log_.size());
+				append_reply->set_conflict_term(0);
+			} else {
+				append_reply->set_conflict_term(getLogEntryAt(pre_log_index).term());
+				uint32_t i = pre_log_index;
+				while (i > 0 && getLogEntryAt(i).term() == append_reply->conflict_term()) {
+					i--;
+				}
+				append_reply->set_conflict_index(i + 1);
+			}
 		}
 	}
 
@@ -278,11 +320,11 @@ const LogEntry& Raft::getLogEntryAt(uint32_t index) const {
 	return log_[index];
 }
 
-bool Raft::isMoreUpToDate(uint32_t last_log_index, uint32_t last_log_term) const {
-	//TODO:
-	(void) last_log_index;
-	(void) last_log_term;
-	return false;
+bool Raft::thisIsMoreUpToDate(uint32_t last_log_index, uint32_t last_log_term) const {
+	uint32_t this_last_log_index = getLastEntryIndex();
+	uint32_t this_last_log_term = log_[this_last_log_index].term();
+	return (this_last_log_term > last_log_term 
+			|| (this_last_log_term == last_log_term && this_last_log_index > last_log_index));
 }
 
 void Raft::constructLog(size_t next_index, std::shared_ptr<RequestAppendArgs> append_args) {
@@ -328,6 +370,19 @@ void Raft::setApplyFunc(ApplyFunc apply_func) {
 
 void Raft::defaultApplyFunc(LogEntry entry) {
 	LOG_INFO << toString() << " :apply msg index=" << entry.index();
+}
+
+void Raft::updateCommitIndex() {
+	std::vector<uint32_t> match_index(match_index_);
+	match_index[me_] = getLastEntryIndex();
+
+	std::sort(match_index.begin(), match_index.end());
+	uint32_t N = match_index[match_index.size() / 2];
+	//不能commit非当前term的entry, 具体见论文5.4
+	if (state_ == Leader && N > commit_index_ && log_[N].term() == current_term_) {
+		commit_index_ = N;
+		applyLogs();
+	}
 }
 
 }
