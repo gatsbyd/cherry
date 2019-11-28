@@ -27,7 +27,7 @@ public:
 		Leader,
 	};
 
-	typedef std::function<void(LogEntry)> ApplyFunc;
+	typedef std::function<void(uint32_t, LogEntry)> ApplyFunc;
 
 	Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon::IpAddress addr, melon::Scheduler* scheduler);
 	~Raft();
@@ -55,7 +55,7 @@ private:
 	std::string toString();
 	int getElectionTimeout();
 	void applyLogs();
-	void defaultApplyFunc(LogEntry);
+	void defaultApplyFunc(uint32_t server_id, LogEntry);
 	void updateCommitIndex();
 
 	//vote rpc

@@ -111,4 +111,33 @@ uint32_t Config::checkTerms() {
 	return term;
 }
 
+void Config::applyFunc(uint32_t server_id, LogEntry entry) {
+	u_int32_t index = entry.index();
+	for (uint32_t i = 0; i < n_; ++i) {
+		if (logs_[i].size() > index) {
+			const LogEntry& old = logs_[i][index];
+			if (old.command() != entry.command()) {
+				LOG_FATAL << server_id << " commit index=" << index << " != server " << i;
+			}
+		}
+	}
+	logs_[server_id].push_back(entry);
+}
+
+//检查每个raft对象index处的log是否处于一致，返回处于一致的raft对象个数
+int Config::nCommitted(int index) {
+	//TODO:
+	(void)index;
+	return -1;
+}
+
+//向leader发送一个命令，等待日志拷贝，检查是否所有raft对象达成一致
+int Config::one(MessagePtr cmd, int expected_server, bool retry) {
+	//TODO:
+	(void) cmd;
+	(void) expected_server;
+	(void) retry;
+	return -1;
+}
+
 }

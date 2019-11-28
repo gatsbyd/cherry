@@ -19,9 +19,12 @@ public:
 	int checkOnLeader();
 	void checkNoLeader();
 	uint32_t checkTerms();
+	int nCommitted(int index);
+	int one(MessagePtr cmd, int expected_server, bool retry);
 
 private:
 	std::shared_ptr<Raft> makeRaft(uint32_t idx, uint32_t n, melon::Scheduler* scheduler);
+	void applyFunc(uint32_t, LogEntry);
 	
 private:
 	uint32_t n_;
@@ -31,6 +34,7 @@ private:
 	std::vector<bool> raft_connected_;
  	std::map<int, std::vector<PolishedRpcClient::Ptr> > connections_;
 	
+	std::map<int, std::vector<LogEntry>>  logs_;
 };
 
 }
