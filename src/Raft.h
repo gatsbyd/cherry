@@ -27,14 +27,17 @@ public:
 		Leader,
 	};
 
+	typedef std::function<void(LogEntry)> ApplyFunc;
+
 	Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon::IpAddress addr, melon::Scheduler* scheduler);
 	~Raft();
 
 	void start();
-	bool start(MessagePtr cmd);
+	bool start(MessagePtr cmd, uint32_t& index, uint32_t& term);
 	void quit();
 	bool isLeader();
 	uint32_t term();
+	void setApplyFunc(ApplyFunc apply_func);
 
 private:
 	void resetLeaderState();
@@ -51,6 +54,8 @@ private:
 	std::string stateString();
 	std::string toString();
 	int getElectionTimeout();
+	void applyLogs();
+	void defaultApplyFunc(LogEntry);
 
 	//vote rpc
 	bool sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args);
@@ -87,6 +92,8 @@ private:
 	int heartbeat_interval_;
 	int64_t timeout_id_;
 	int64_t hearbeat_id_;
+	
+	ApplyFunc apply_func_;
 };
 }
 #endif

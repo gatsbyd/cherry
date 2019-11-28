@@ -19,7 +19,8 @@ Raft::Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon:
 	scheduler_(scheduler),
 	server_(addr, scheduler),
 	peers_(peers),
-	heartbeat_interval_(100) {
+	heartbeat_interval_(100),
+	apply_func_(std::bind(&Raft::defaultApplyFunc, this)) {
 		server_.registerRpcHandler<RequestVoteArgs>(std::bind(&Raft::onRequestVote, this, std::placeholders::_1));
 		server_.registerRpcHandler<RequestAppendArgs>(std::bind(&Raft::onRequestAppendEntry, this, std::placeholders::_1));
 		server_.start();
@@ -42,10 +43,20 @@ void Raft::start() {
 	turnToFollower(0);
 }
 
-bool Raft::start(MessagePtr cmd) {
-	//todo
-	(void) cmd;
-	return true;
+bool Raft::start(MessagePtr cmd, uint32_t& index, uint32_t& term) {
+	bool is_leader = state_ == Leader;
+	term = current_term_;
+	if (is_leader) {
+		index = getLastEntryIndex() + 1;
+		LogEntry entry;
+		entry.set_term(term);
+		entry.set_index(index);
+		std::string cmd_data;
+		cmd->SerializeToString(&cmd_data);
+		entry.set_command(cmd_data);
+		log_.push_back(entry);
+	}
+	return is_leader;
 }
 
 void Raft::quit() {
@@ -172,9 +183,27 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 		append_reply->set_success(false);
 	} else {
 		turnToFollower(append_args->term());
-		//TODO:
 		append_reply->set_term(current_term_);
 		append_reply->set_success(true);
+
+		uint32_t pre_log_index = append_args->pre_log_index();
+		if ((pre_log_index == 0)
+			|| (pre_log_index <= getLastEntryIndex() && log_[pre_log_index].term() == append_args->pre_log_term())) {
+			//细节:https://thesquareplanet.com/blog/raft-qa/最后一个问题
+			for (int i = 0; i < append_args->entries_size(); ++i) {
+				const LogEntry& entry = append_args->entries(i);
+				if (entry.index() <= getLastEntryIndex()) {
+					log_[i] = entry;
+				} else {
+					log_.push_back(entry);
+				}
+			}
+			LOG_INFO << toString() << " got entry from " << append_args->leader_id();
+		}
+		if (append_args->leader_commit() > commit_index_) {
+			commit_index_ = std::min(append_args->leader_commit(), getLastEntryIndex());
+			applyLogs();
+		}
 	}
 
 	return append_reply;
@@ -239,6 +268,7 @@ void Raft::resetLeaderState() {
 	next_index_.insert(next_index_.begin(), peers_.size(), log_.size());
 	match_index_.insert(match_index_.begin(), peers_.size(), 0);
 }
+
 uint32_t Raft::getLastEntryIndex() const {
 	return log_.size() - 1;
 }
@@ -283,6 +313,21 @@ std::string Raft::toString() {
 
 int Raft::getElectionTimeout() {
 	return 300 + rand() % 201;		//range from 300-500ms
+}
+
+void Raft::applyLogs() {
+	while (last_applied_ < commit_index_) {
+		last_applied_++;
+		apply_func_(getLogEntryAt(last_applied_));
+	}
+}
+
+void Raft::setApplyFunc(ApplyFunc apply_func) {
+	apply_func_ = std::move(apply_func);
+}
+
+void Raft::defaultApplyFunc(LogEntry entry) {
+	LOG_INFO << toString() << " :apply msg index=" << entry.index();
 }
 
 }
