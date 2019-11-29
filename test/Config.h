@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <map>
+#include <melon/Mutex.h>
 
 namespace cherry {
 
@@ -35,6 +36,7 @@ private:
  	std::map<int, std::vector<PolishedRpcClient::Ptr> > connections_;
 	
 	std::map<int, std::vector<LogEntry>>  logs_;
+	melon::Mutex mutex_;
 };
 
 }

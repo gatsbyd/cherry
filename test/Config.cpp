@@ -114,29 +114,35 @@ uint32_t Config::checkTerms() {
 
 void Config::applyFunc(uint32_t server_id, LogEntry entry) {
 	u_int32_t index = entry.index();
-	for (uint32_t i = 0; i < n_; ++i) {
-		if (logs_[i].size() > index) {
-			const LogEntry& old = logs_[i][index];
-			if (old.command() != entry.command()) {
-				LOG_FATAL << server_id << " commit index=" << index << " != server " << i;
+	{
+		melon::MutexGuard lock(mutex_);
+		for (uint32_t i = 0; i < n_; ++i) {
+			if (logs_[i].size() > index) {
+				const LogEntry& old = logs_[i][index];
+				if (old.command() != entry.command()) {
+					LOG_FATAL << server_id << " commit index=" << index << " != server " << i;
+				}
 			}
 		}
+		logs_[server_id].push_back(entry);
 	}
-	logs_[server_id].push_back(entry);
 }
 
 //检查每个raft对象index处的log是否处于一致，返回处于一致的raft对象个数
 int Config::nCommitted(int index) {
 	int count = 0;
 	std::string cmd;
-	for (uint32_t i = 0; i < n_; ++i) {
-		if (logs_[i].size() > index) {
-			const std::string& cmd1 = logs_[i][index].command();
-			if (count > 0 && cmd != cmd1) {
-				LOG_FATAL << "committed values do not match index " << index << ", " << cmd << ", " << cmd1;
+	{
+		melon::MutexGuard lock(mutex_);
+		for (uint32_t i = 0; i < n_; ++i) {
+			if (logs_[i].size() > index) {
+				const std::string& cmd1 = logs_[i][index].command();
+				if (count > 0 && cmd != cmd1) {
+					LOG_FATAL << "committed values do not match index " << index << ", " << cmd << ", " << cmd1;
+				}
+				count++;
+				cmd = cmd1;
 			}
-			count++;
-			cmd = cmd1;
 		}
 	}
 	return count;
