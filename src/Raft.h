@@ -33,7 +33,7 @@ public:
 	~Raft();
 
 	void start();
-	bool start(MessagePtr cmd, uint32_t& index, uint32_t& term);
+	bool start(const std::string& cmd, uint32_t& index, uint32_t& term);
 	void quit();
 	bool isLeader();
 	uint32_t term();

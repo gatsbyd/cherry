@@ -20,7 +20,7 @@ public:
 	void checkNoLeader();
 	uint32_t checkTerms();
 	int nCommitted(int index);
-	int one(MessagePtr cmd, int expected_server, bool retry);
+	int one(const std::string& cmd, int expected_server, bool retry);
 
 private:
 	std::shared_ptr<Raft> makeRaft(uint32_t idx, uint32_t n, melon::Scheduler* scheduler);

@@ -43,7 +43,7 @@ void Raft::start() {
 	turnToFollower(0);
 }
 
-bool Raft::start(MessagePtr cmd, uint32_t& index, uint32_t& term) {
+bool Raft::start(const std::string& cmd, uint32_t& index, uint32_t& term) {
 	bool is_leader = state_ == Leader;
 	term = current_term_;
 	if (is_leader) {
@@ -51,9 +51,7 @@ bool Raft::start(MessagePtr cmd, uint32_t& index, uint32_t& term) {
 		LogEntry entry;
 		entry.set_term(term);
 		entry.set_index(index);
-		std::string cmd_data;
-		cmd->SerializeToString(&cmd_data);
-		entry.set_command(cmd_data);
+		entry.set_command(cmd);
 		log_.push_back(entry);
 	}
 	return is_leader;
