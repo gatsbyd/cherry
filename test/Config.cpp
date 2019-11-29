@@ -119,9 +119,7 @@ void Config::applyFunc(uint32_t server_id, LogEntry entry) {
 		for (uint32_t i = 0; i < n_; ++i) {
 			if (logs_[i].size() > index) {
 				const LogEntry& old = logs_[i][index];
-				if (old.command() != entry.command()) {
-					LOG_FATAL << server_id << " commit index=" << index << " != server " << i;
-				}
+				EXPECT_EQ(old.command(), entry.command());
 			}
 		}
 		logs_[server_id].push_back(entry);
@@ -129,7 +127,7 @@ void Config::applyFunc(uint32_t server_id, LogEntry entry) {
 }
 
 //检查每个raft对象index处的log是否处于一致，返回处于一致的raft对象个数
-int Config::nCommitted(int index) {
+int Config::nCommitted(uint32_t index) {
 	int count = 0;
 	std::string cmd;
 	{
@@ -137,8 +135,8 @@ int Config::nCommitted(int index) {
 		for (uint32_t i = 0; i < n_; ++i) {
 			if (logs_[i].size() > index) {
 				const std::string& cmd1 = logs_[i][index].command();
-				if (count > 0 && cmd != cmd1) {
-					LOG_FATAL << "committed values do not match index " << index << ", " << cmd << ", " << cmd1;
+				if (count > 0) {
+					EXPECT_EQ(cmd, cmd1);
 				}
 				count++;
 				cmd = cmd1;
@@ -160,7 +158,7 @@ int Config::one(const std::string& cmd, int expected_server, bool retry) {
 			if (raft_connected_[starts]) {
 				uint32_t index1;
 				uint32_t term;
-				bool is_leader = rafts_[starts]->start(cmd, &index1, &term);
+				bool is_leader = rafts_[starts]->start(cmd, index1, term);
 				if (is_leader) {
 					index = index1;
 					break;
@@ -180,7 +178,7 @@ int Config::one(const std::string& cmd, int expected_server, bool retry) {
 				now = melon::Timestamp::now();
 			} while((now.getSec() - t1.getSec()) < 2);
 			if (retry == false) {
-				LOG_FATAL << "one() failed to reach agreement";
+				EXPECT_TRUE(false);
 			}
 			
 		} else {
@@ -189,7 +187,7 @@ int Config::one(const std::string& cmd, int expected_server, bool retry) {
 		
 		now = melon::Timestamp::now();
 	} while (now.getSec() - t0.getSec() < 10);
-	LOG_FATAL << "one() failed to reach agreement";
+	EXPECT_TRUE(false);
 	return -1;
 }
 

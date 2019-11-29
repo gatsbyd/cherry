@@ -173,7 +173,7 @@ void Raft::onRequestAppendReply(std::shared_ptr<RequestAppendArgs> append_args, 
 		next_index_[server_id] = match_index_[server_id] + 1;
 		updateCommitIndex();
 	} else { //返回false有两种原因:1.出现term比当前server大的， 2.参数中的PreLogIndex对应的Term和目标server中index对应的Term不一致
-		if (current_term_ < append_reply->term()) {
+		if (append_args->term() < append_reply->term()) {
 			turnToFollower(append_reply->term());
 		} else {
 			if (append_reply->conflict_term() == 0) {
@@ -203,18 +203,24 @@ void Raft::onRequestAppendReply(std::shared_ptr<RequestAppendArgs> append_args, 
 MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args) {
 	LOG_INFO << toString() << " :recevie append rpc from " << append_args->leader_id();
 	std::shared_ptr<RequestAppendReply> append_reply = std::make_shared<RequestAppendReply>();
+	append_reply->set_term(current_term_);
+
 	if (append_args->term() < current_term_) {
-		append_reply->set_term(current_term_);
 		append_reply->set_success(false);
+
+		append_reply->set_conflict_index(0);
+		append_reply->set_conflict_term(0);
 	} else {
 		turnToFollower(append_args->term());
-		append_reply->set_term(current_term_);
-		append_reply->set_success(true);
 
 		uint32_t pre_log_index = append_args->pre_log_index();
 		if ((pre_log_index == 0)
 			|| (pre_log_index <= getLastEntryIndex() && log_[pre_log_index].term() == append_args->pre_log_term())) {
 			//细节:https://thesquareplanet.com/blog/raft-qa/最后一个问题
+			append_reply->set_success(true);
+			append_reply->set_conflict_index(0);
+			append_reply->set_conflict_term(0);
+
 			for (int i = 0; i < append_args->entries_size(); ++i) {
 				const LogEntry& entry = append_args->entries(i);
 				if (entry.index() <= getLastEntryIndex()) {
@@ -347,7 +353,11 @@ std::string Raft::stateString() {
 
 std::string Raft::toString() {
 	std::ostringstream os;
-	os << "server(id=" << me_ << ", state=" << stateString() << ", term=" << current_term_ << ")";
+	os << "server(id=" << me_ << ", state=" << stateString() << ", term=" << current_term_ << ", log=[";
+	for (const LogEntry& entry : log_) {
+		os << "<index=" << entry.index() << ", term=" << entry.term() << ", cmd=" << entry.command() << "> ";
+	}
+	os << "]";
 	return os.str();
 }
 

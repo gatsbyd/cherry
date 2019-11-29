@@ -20,7 +20,7 @@ public:
 	int checkOnLeader();
 	void checkNoLeader();
 	uint32_t checkTerms();
-	int nCommitted(int index);
+	int nCommitted(uint32_t index);
 	int one(const std::string& cmd, int expected_server, bool retry);
 
 private:
