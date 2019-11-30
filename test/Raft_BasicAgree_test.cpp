@@ -20,10 +20,14 @@ TEST(raft_agree_test, TestBasicAgree) {
 	int iters = 3;
 	for (int index = 1; index < iters + 1; ++index) {
 		int nd = cfg.nCommitted(index);
-		EXPECT_TRUE(nd <= 0);
+		if (nd > 0) {
+			LOG_FATAL << "some have committed before Start()";
+		}
 
 		int xindex = cfg.one(std::to_string(index*100), servers, false);
-		EXPECT_EQ(index, xindex);
+		if (xindex != index) {
+			LOG_FATAL << "got index " << xindex << " but expected " << index;
+		}
 	}
 }
 

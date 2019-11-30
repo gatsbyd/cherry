@@ -65,7 +65,7 @@ private:
 
 	//append rpc
 	bool sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs> append_args);
-	void onRequestAppendReply(std::shared_ptr<RequestAppendArgs> append_args, std::shared_ptr<RequestAppendReply> append_reply);
+	void onRequestAppendReply(uint32_t target_server, std::shared_ptr<RequestAppendArgs> append_args, std::shared_ptr<RequestAppendReply> append_reply);
 	MessagePtr onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args);
 
 private:

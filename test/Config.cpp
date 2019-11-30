@@ -15,6 +15,13 @@ Config::Config(uint32_t n, melon::Scheduler* scheduler)
 	for (uint32_t i = 0; i < n; ++i) {
 		rafts_.push_back(makeRaft(i, n, scheduler));
 	}
+	//Figure 2表明logs下标从1开始，所以添加一个空的Entry
+	LogEntry entry;
+	entry.set_term(0);
+	entry.set_index(0);
+	for (uint32_t i = 0; i < n; ++i) {
+		logs_[i].push_back(entry);
+	}
 
 }
 
@@ -123,6 +130,7 @@ void Config::applyFunc(uint32_t server_id, LogEntry entry) {
 			}
 		}
 		logs_[server_id].push_back(entry);
+		LOG_INFO << server_id << " apply <index=" << index << ", cmd=" << entry.command() << ">";
 	}
 }
 
@@ -171,7 +179,9 @@ int Config::one(const std::string& cmd, int expected_server, bool retry) {
 			melon::Timestamp t1 = melon::Timestamp::now();
 			do {
 				int nc = nCommitted(index);
+				LOG_INFO << "index=" << index << ", nc=" << nc;
 				if (nc > 0 && nc >= expected_server) {
+					LOG_INFO << "pass one(), index=" << index;
 					return index;
 				}
 				usleep(20 * 1000);

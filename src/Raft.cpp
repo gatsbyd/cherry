@@ -25,14 +25,14 @@ Raft::Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon:
 		server_.registerRpcHandler<RequestAppendArgs>(std::bind(&Raft::onRequestAppendEntry, this, std::placeholders::_1));
 		server_.start();
 		//todo:read log_, voted_for_, current_term_ from persistent
-		
-		resetLeaderState();
 
 		//Figure 2表明logs下标从1开始，所以添加一个空的Entry
 		LogEntry entry;
 		entry.set_term(0);
 		entry.set_index(0);
 		log_.push_back(entry);
+
+		resetLeaderState();
 }
 
 Raft::~Raft() {
@@ -53,6 +53,7 @@ bool Raft::start(const std::string& cmd, uint32_t& index, uint32_t& term) {
 		entry.set_index(index);
 		entry.set_command(cmd);
 		log_.push_back(entry);
+		LOG_INFO << toString() << " :receive new command " << cmd;
 	}
 	return is_leader;
 }
@@ -138,17 +139,15 @@ void Raft::heartbeat() {
 	}
 	for (size_t i = 0; i < peers_.size(); ++i) {
 		std::shared_ptr<RequestAppendArgs> append_args = std::make_shared<RequestAppendArgs>();
-		{
-			melon::MutexGuard lock(mutex_);
-			append_args->set_term(current_term_);
-			append_args->set_leader_id(me_);
-			int next_index = next_index_[i];
-			append_args->set_pre_log_index(next_index - 1);
-			append_args->set_pre_log_term(log_[next_index - 1].term());
-			append_args->set_leader_commit(commit_index_);
+
+		append_args->set_term(current_term_);
+		append_args->set_leader_id(me_);
+		int next_index = next_index_[i];
+		append_args->set_pre_log_index(next_index - 1);
+		append_args->set_pre_log_term(log_[next_index - 1].term());
+		append_args->set_leader_commit(commit_index_);
 			
-			constructLog(next_index, append_args);
-		}
+		constructLog(next_index, append_args);
 		if (i != me_) {
 			sendRequestAppend(i, append_args);
 		}
@@ -156,37 +155,37 @@ void Raft::heartbeat() {
 	LOG_INFO << toString() << " :send append rpc";
 }
 
-bool Raft::sendRequestAppend(uint32_t server, std::shared_ptr<RequestAppendArgs> append_args) {
-	assert(server < peers_.size());
-	return peers_[server]->Call<RequestAppendReply>(append_args, 
-					std::bind(&Raft::onRequestAppendReply, this, append_args, std::placeholders::_1));
+bool Raft::sendRequestAppend(uint32_t target_server, std::shared_ptr<RequestAppendArgs> append_args) {
+	assert(target_server < peers_.size());
+	return peers_[target_server]->Call<RequestAppendReply>(append_args, 
+					std::bind(&Raft::onRequestAppendReply, this, target_server, append_args, std::placeholders::_1));
 }
 
-void Raft::onRequestAppendReply(std::shared_ptr<RequestAppendArgs> append_args, std::shared_ptr<RequestAppendReply> append_reply) {
+void Raft::onRequestAppendReply(uint32_t target_server, std::shared_ptr<RequestAppendArgs> append_args, std::shared_ptr<RequestAppendReply> append_reply) {
 	if (state_ != Leader && current_term_ != append_args->term()) {
 		return;
 	}
-	int server_id = append_args->leader_id();
 	if (append_reply->success()) {
 		//成功后更新leader的nextIndex和matchIndex，并且更新commitIndex
-		match_index_[server_id] = append_args->pre_log_index() + append_args->entries_size();
-		next_index_[server_id] = match_index_[server_id] + 1;
+		match_index_[target_server] = append_args->pre_log_index() + append_args->entries_size();
+		next_index_[target_server] = match_index_[target_server] + 1;
+		LOG_INFO << toString() << " update next_index[" << target_server << "] to " << next_index_[target_server];
 		updateCommitIndex();
 	} else { //返回false有两种原因:1.出现term比当前server大的， 2.参数中的PreLogIndex对应的Term和目标server中index对应的Term不一致
 		if (append_args->term() < append_reply->term()) {
 			turnToFollower(append_reply->term());
 		} else {
 			if (append_reply->conflict_term() == 0) {
-				next_index_[server_id] = append_reply->conflict_index();
+				next_index_[target_server] = append_reply->conflict_index();
 			} else {
 				uint32_t pre_log_index = append_args->pre_log_index();
 				while ((pre_log_index >= append_reply->conflict_index())
 								&& (log_[pre_log_index].term() != append_reply->conflict_term())) {
 					pre_log_index--;
 				}
-				next_index_[server_id] = pre_log_index + 1;
+				next_index_[target_server] = pre_log_index + 1;
 			} 
-			uint32_t next_index = next_index_[server_id];
+			uint32_t next_index = next_index_[target_server];
 			//调整log参数,重新发送append rpc
 			std::shared_ptr<RequestAppendArgs> new_args = std::make_shared<RequestAppendArgs>();
 			new_args->set_term(current_term_);
@@ -195,7 +194,7 @@ void Raft::onRequestAppendReply(std::shared_ptr<RequestAppendArgs> append_args, 
 			new_args->set_pre_log_term(log_[next_index - 1].term());
 			new_args->set_leader_commit(commit_index_);
 			constructLog(next_index, append_args);
-			sendRequestAppend(server_id, new_args);
+			sendRequestAppend(target_server, new_args);
 		}
 	}
 }
