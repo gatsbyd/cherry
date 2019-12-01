@@ -228,7 +228,7 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 					log_.push_back(entry);
 				}
 			}
-			LOG_INFO << toString() << " got entry from " << append_args->leader_id();
+			LOG_INFO << toString() << " got " << append_args->entries_size() << " entry from " << append_args->leader_id();
 
 			if (append_args->leader_commit() > commit_index_) {
 				commit_index_ = std::min(append_args->leader_commit(), getLastEntryIndex());

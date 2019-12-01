@@ -179,7 +179,6 @@ int Config::one(const std::string& cmd, int expected_server, bool retry) {
 			melon::Timestamp t1 = melon::Timestamp::now();
 			do {
 				int nc = nCommitted(index);
-				LOG_INFO << "index=" << index << ", nc=" << nc;
 				if (nc > 0 && nc >= expected_server) {
 					LOG_INFO << "pass one(), index=" << index;
 					return index;
