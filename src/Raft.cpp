@@ -273,6 +273,8 @@ void Raft::turnToFollower(uint32_t term) {
 }
 
 void Raft::turnToCandidate() {
+	scheduler_->cancel(timeout_id_);
+	LOG_INFO << toString() << " :cancel timeout_id " << timeout_id_;
 	{
 		melon::MutexGuard lock(mutex_);
 		state_ = Candidate;
