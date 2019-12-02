@@ -16,6 +16,7 @@ public:
 	Config(uint32_t n, melon::Scheduler* scheduler);
 	void start();
 	void setConnection(uint32_t idx, bool connection);
+	std::shared_ptr<Raft> getRaft(int index);
 
 	int checkOnLeader();
 	void checkNoLeader();

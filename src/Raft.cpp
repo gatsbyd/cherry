@@ -138,17 +138,17 @@ void Raft::heartbeat() {
 		return;
 	}
 	for (size_t i = 0; i < peers_.size(); ++i) {
-		std::shared_ptr<RequestAppendArgs> append_args = std::make_shared<RequestAppendArgs>();
-
-		append_args->set_term(current_term_);
-		append_args->set_leader_id(me_);
-		int next_index = next_index_[i];
-		append_args->set_pre_log_index(next_index - 1);
-		append_args->set_pre_log_term(log_[next_index - 1].term());
-		append_args->set_leader_commit(commit_index_);
-			
-		constructLog(next_index, append_args);
 		if (i != me_) {
+			std::shared_ptr<RequestAppendArgs> append_args = std::make_shared<RequestAppendArgs>();
+
+			append_args->set_term(current_term_);
+			append_args->set_leader_id(me_);
+			int next_index = next_index_[i];
+			append_args->set_pre_log_index(next_index - 1);
+			append_args->set_pre_log_term(log_[next_index - 1].term());
+			append_args->set_leader_commit(commit_index_);
+			constructLog(next_index, append_args);
+
 			sendRequestAppend(i, append_args);
 		}
 	}
@@ -223,7 +223,7 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 			for (int i = 0; i < append_args->entries_size(); ++i) {
 				const LogEntry& entry = append_args->entries(i);
 				if (entry.index() <= getLastEntryIndex()) {
-					log_[i] = entry;
+					log_[entry.index()] = entry;
 				} else {
 					log_.push_back(entry);
 				}

@@ -61,6 +61,10 @@ void Config::setConnection(uint32_t idx, bool connection) {
 	}
 }
 
+std::shared_ptr<Raft> Config::getRaft(int index) {
+	return rafts_[index];
+}
+
 //check have one and only one leader in a term
 int Config::checkOnLeader() {
 	for (int iter = 0; iter < 10; ++iter) {
