@@ -220,6 +220,7 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 			append_reply->set_conflict_index(0);
 			append_reply->set_conflict_term(0);
 
+			/**
 			for (int i = 0; i < append_args->entries_size(); ++i) {
 				const LogEntry& entry = append_args->entries(i);
 				if (entry.index() <= getLastEntryIndex()) {
@@ -228,7 +229,29 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 					log_.push_back(entry);
 				}
 			}
+			**/
 			LOG_INFO << toString() << " got " << append_args->entries_size() << " entry from " << append_args->leader_id();
+
+			if (append_args->entries_size() > 0) {
+				log_.erase(log_.begin() + pre_log_index + 1, log_.end());
+
+				std::vector<LogEntry> new_logs;
+				for (int i = 0; i < append_args->entries_size(); ++i) {
+					const LogEntry& entry = append_args->entries(i);
+					new_logs.push_back(entry);
+				}
+
+				const LogEntry& last_entry = append_args->entries(append_args->entries_size() - 1);
+				uint32_t index = pre_log_index + append_args->entries_size() + 1;
+				if (index <= getLastEntryIndex() && log_[index].term() >= last_entry.term()) {
+					for (uint32_t i = index; i < log_.size(); ++i) {
+						new_logs.push_back(log_[i]);
+					}
+				}
+				
+				log_.insert(log_.end(), new_logs.begin(), new_logs.end());
+
+			}
 
 			if (append_args->leader_commit() > commit_index_) {
 				commit_index_ = std::min(append_args->leader_commit(), getLastEntryIndex());

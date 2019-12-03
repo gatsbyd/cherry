@@ -46,6 +46,7 @@ void Config::start() {
 }
 
 void Config::setConnection(uint32_t idx, bool connection) {
+	LOG_INFO << (connection ? "connect " : "disconnect ") << idx;
 	raft_connected_[idx] = connection;
 	//outgoing
 	const std::vector<PolishedRpcClient::Ptr>& peers = connections_[idx];
