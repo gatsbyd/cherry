@@ -31,7 +31,6 @@ std::shared_ptr<Raft> Config::makeRaft(uint32_t idx, uint32_t n, melon::Schedule
 		melon::IpAddress server_addr(ip_, base_port_ + j);
 		peers.push_back(std::make_shared<PolishedRpcClient>(server_addr, scheduler));
 	}
-	connections_[idx] = peers;
 
 	melon::IpAddress addr(base_port_ + idx);
 	std::shared_ptr<Raft> raft = std::make_shared<Raft>(peers, idx, addr, scheduler);
@@ -46,20 +45,20 @@ void Config::start() {
 }
 
 void Config::setConnection(uint32_t idx, bool connection) {
-	LOG_INFO << (connection ? "connect " : "disconnect ") << idx;
 	raft_connected_[idx] = connection;
 	//outgoing
-	const std::vector<PolishedRpcClient::Ptr>& peers = connections_[idx];
-	for (const PolishedRpcClient::Ptr& peer : peers) {
-		peer->setConnected(connection);
+	const std::vector<PolishedRpcClient::Ptr>& peers = rafts_[idx]->getPeers();
+	for (uint32_t i = 0; i < peers.size(); ++i) {
+		const PolishedRpcClient::Ptr& peer = peers[i];
+		peer->setConnected(connection && raft_connected_[i]);
 	}
 	
 	//incoming
-	std::map<int, std::vector<PolishedRpcClient::Ptr> >::iterator it = connections_.begin();
-	while (it != connections_.end()) {
-		it->second[idx]->setConnected(connection);
-		++it;
+	for (uint32_t i = 0; i < n_; ++i) {
+		const std::vector<PolishedRpcClient::Ptr>& peers = rafts_[i]->getPeers();
+		peers[idx]->setConnected(connection && raft_connected_[i]);
 	}
+	LOG_INFO << (connection ? "connect " : "disconnect ") << idx;
 }
 
 std::shared_ptr<Raft> Config::getRaft(int index) {
@@ -192,7 +191,7 @@ int Config::one(const std::string& cmd, int expected_server, bool retry) {
 				now = melon::Timestamp::now();
 			} while((now.getSec() - t1.getSec()) < 2);
 			if (retry == false) {
-				EXPECT_TRUE(false);
+				LOG_FATAL << cmd << " failed to reach agreement";
 			}
 			
 		} else {
@@ -201,7 +200,7 @@ int Config::one(const std::string& cmd, int expected_server, bool retry) {
 		
 		now = melon::Timestamp::now();
 	} while (now.getSec() - t0.getSec() < 10);
-	EXPECT_TRUE(false);
+	LOG_FATAL << " failed to reach agreement";
 	return -1;
 }
 

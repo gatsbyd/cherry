@@ -178,6 +178,7 @@ void Raft::onRequestAppendReply(uint32_t target_server, std::shared_ptr<RequestA
 			if (append_reply->conflict_term() == 0) {
 				next_index_[target_server] = append_reply->conflict_index();
 			} else {
+				// 目标server从append_reply->conflict_index()到append_args->pre_log_index()之间的log term都是append_reply->conflict_term()
 				uint32_t pre_log_index = append_args->pre_log_index();
 				while ((pre_log_index >= append_reply->conflict_index())
 								&& (log_[pre_log_index].term() != append_reply->conflict_term())) {
@@ -193,14 +194,16 @@ void Raft::onRequestAppendReply(uint32_t target_server, std::shared_ptr<RequestA
 			new_args->set_pre_log_index(next_index - 1);
 			new_args->set_pre_log_term(log_[next_index - 1].term());
 			new_args->set_leader_commit(commit_index_);
-			constructLog(next_index, append_args);
+			constructLog(next_index, new_args);
 			sendRequestAppend(target_server, new_args);
+			LOG_INFO << toString() << ": resend append rpc to " << target_server << " change pre_log_index to " << next_index - 1;
 		}
 	}
 }
 
 MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args) {
-	LOG_INFO << toString() << " :recevie append rpc from " << append_args->leader_id();
+	LOG_INFO << toString() << " :receive append rpc from " << append_args->leader_id() << ", pre_log_index=" 
+			<< append_args->pre_log_index() << ", pre_log_term=" << append_args->pre_log_term();
 	std::shared_ptr<RequestAppendReply> append_reply = std::make_shared<RequestAppendReply>();
 	append_reply->set_term(current_term_);
 
@@ -220,16 +223,6 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 			append_reply->set_conflict_index(0);
 			append_reply->set_conflict_term(0);
 
-			/**
-			for (int i = 0; i < append_args->entries_size(); ++i) {
-				const LogEntry& entry = append_args->entries(i);
-				if (entry.index() <= getLastEntryIndex()) {
-					log_[entry.index()] = entry;
-				} else {
-					log_.push_back(entry);
-				}
-			}
-			**/
 			LOG_INFO << toString() << " got " << append_args->entries_size() << " entry from " << append_args->leader_id();
 
 			if (append_args->entries_size() > 0) {
@@ -263,6 +256,7 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 			if (pre_log_index > getLastEntryIndex()) {
 				append_reply->set_conflict_index(log_.size());
 				append_reply->set_conflict_term(0);
+				LOG_INFO << toString() << " onRequestAppendEntry(), pre_log_index=" << pre_log_index << " > getLastEntryIndex=" << getLastEntryIndex();
 			} else {
 				append_reply->set_conflict_term(getLogEntryAt(pre_log_index).term());
 				uint32_t i = pre_log_index;
@@ -270,6 +264,7 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 					i--;
 				}
 				append_reply->set_conflict_index(i + 1);
+				LOG_INFO << toString() << ": conflict_index=" << append_reply->conflict_index() << ", conflict_term=" << append_reply->conflict_term();
 			}
 		}
 	}
@@ -381,7 +376,11 @@ std::string Raft::toString() {
 	for (const LogEntry& entry : log_) {
 		os << "<index=" << entry.index() << ", term=" << entry.term() << ", cmd=" << entry.command() << "> ";
 	}
-	os << "]";
+	os << "], peers(";
+	for (const PolishedRpcClient::Ptr& peer : peers_) {
+		os << (peer->isConnected() ? "1" : "0") << ",";
+	}
+	os << "))";
 	return os.str();
 }
 

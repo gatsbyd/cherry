@@ -39,6 +39,9 @@ public:
 	uint32_t term();
 	void setApplyFunc(ApplyFunc apply_func);
 
+	// for test
+	const std::vector<PolishedRpcClient::Ptr>& getPeers() const { return peers_; }
+
 private:
 	void resetLeaderState();
 	void turnToFollower(uint32_t term);

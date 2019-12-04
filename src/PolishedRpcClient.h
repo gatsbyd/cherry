@@ -16,8 +16,13 @@ class PolishedRpcClient {
 public:
 	typedef std::shared_ptr<PolishedRpcClient> Ptr;
 	PolishedRpcClient(const melon::IpAddress& server_addr, melon::Scheduler* scheduler):client(server_addr, scheduler){}
+
 	void setConnected(bool connected) {
 		connected_ = connected;
+	}
+
+	bool isConnected() const { 
+		return connected_;
 	}
 
 	template <typename T>
