@@ -69,14 +69,12 @@ void Raft::poll() {
 	}
 	//construct RequestVoteArgs
 	std::shared_ptr<RequestVoteArgs> vote_args = std::make_shared<RequestVoteArgs>();
-	{
-		melon::MutexGuard lock(mutex_);
-		vote_args->set_term(current_term_);
-		vote_args->set_candidate_id(me_);
-		vote_args->set_last_log_term(getLogEntryAt(getLastEntryIndex()).term());
-		vote_args->set_last_log_index(getLastEntryIndex());
-		LOG_INFO << toString() << " :send vote rpc";
-	}
+	vote_args->set_term(current_term_);
+	vote_args->set_candidate_id(me_);
+	vote_args->set_last_log_term(getLogEntryAt(getLastEntryIndex()).term());
+	vote_args->set_last_log_index(getLastEntryIndex());
+	LOG_INFO << toString() << " :send vote rpc";
+
 	for (size_t i = 0; i < peers_.size(); ++i) {
 		if (i != me_) {
 			sendRequestVote(i, vote_args);
@@ -293,13 +291,11 @@ void Raft::turnToFollower(uint32_t term) {
 void Raft::turnToCandidate() {
 	scheduler_->cancel(timeout_id_);
 	LOG_INFO << toString() << " :cancel timeout_id " << timeout_id_;
-	{
-		melon::MutexGuard lock(mutex_);
-		state_ = Candidate;
-		current_term_ += 1;
-		voted_for_ = me_;
-		voted_gain_ = 1;
-	}
+	state_ = Candidate;
+	current_term_ += 1;
+	voted_for_ = me_;
+	voted_gain_ = 1;
+
 	LOG_INFO << toString() << " :become Candidate";
 	poll();
 	timeout_id_ = scheduler_->runAfter(getElectionTimeout() * 1000, 

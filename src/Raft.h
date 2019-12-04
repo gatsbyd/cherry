@@ -2,7 +2,6 @@
 #define _CHERRY_RAFT_H_
 
 #include "args.pb.h"
-#include "channel/chan.h"
 #include "PolishedRpcClient.h"
 
 #include <melon/Address.h>
@@ -92,7 +91,6 @@ private:
 	melon::Scheduler* scheduler_;
 	melon::rpc::RpcServer server_;
 	std::vector<PolishedRpcClient::Ptr> peers_;
-	melon::Mutex mutex_;
 	int heartbeat_interval_;
 	int64_t timeout_id_;
 	int64_t hearbeat_id_;
