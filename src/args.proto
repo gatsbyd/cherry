@@ -39,8 +39,14 @@ message RequestAppendReply {
 message KvCommnad {
 	required string operation = 1;
 	required string key = 2;
-	required string value = 3;
+	optional string value = 3;
 	required int64 cid = 4;
 	required uint32 seq = 5;
+}
+
+message KvCommnadReply {
+	required bool leader = 1;
+	optional string error = 2;
+	optional string value = 3;
 }
 

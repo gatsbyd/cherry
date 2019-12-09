@@ -37,6 +37,7 @@ public:
 	bool isLeader();
 	uint32_t term();
 	void setApplyFunc(ApplyFunc apply_func);
+	melon::rpc::RpcServer& getRpcServer() { return server_; }
 
 	// for test
 	const std::vector<PolishedRpcClient::Ptr>& getPeers() const { return peers_; }
