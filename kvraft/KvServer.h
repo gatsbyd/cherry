@@ -10,11 +10,18 @@ namespace cherry {
 	
 class KvServer {
 public:
+	struct LatestReply {
+		uint32_t seq;
+		std::string value;
+		std::string error;
+	};
+
 	KvServer(const std::vector<PolishedRpcClient::Ptr>& peers, 
 					uint32_t me, 
 					melon::IpAddress addr, 
 					melon::Scheduler* scheduler);
 
+	MessagePtr onCommand(std::shared_ptr<KvCommnad> args);
 
 private:
 	uint32_t me_;
@@ -22,6 +29,7 @@ private:
 	Raft raft;
 	
 	std::unordered_map<std::string, std::string> db_;
+	std::unordered_map<int64_t, LatestReply> latest_reply_;
 };
 
 
