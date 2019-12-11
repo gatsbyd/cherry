@@ -10,8 +10,10 @@ KvServer::KvServer(const std::vector<PolishedRpcClient::Ptr>& peers,
 				  scheduler_(scheduler),
 				  raft(peers, me, addr, scheduler) {
 	melon::rpc::RpcServe& server = raft.getServer();
+	raft.setApplyFunc(std::bind(&KvServer::applyFunc, this, std::placeholders::_1, std::placeholders::_2));
 	server.registerRpcHandler<KvCommnad>(std::bind(&KvServer::onCommand, this, std::placeholders::_1));
 
+	raft.start();
 }
 
 MessagePtr KvServer::onCommand(std::shared_ptr<KvCommnad> args) {
@@ -20,11 +22,18 @@ MessagePtr KvServer::onCommand(std::shared_ptr<KvCommnad> args) {
 	if (!is_leader) {
 		reply->set_leader(false);
 	} else {
-		auto it = latest_reply_.find(args->cid());
-		if (it != latest_reply_.end() && args->seq() <= it->second.seq) {
-			reply->set_leader(true);
-			reply->set_value(it->second.value);
-			reply->set_error(it->second.error);
+		reply->set_leader(true);
+		auto it = latest_applied_seq_per_client_.find(args->cid());
+		if (it != latest_applied_seq_per_client_.end() && args->seq() <= it->second) {
+			if (args->operation() == GET) {
+				auto key_it = db_.find(args->key());
+				if (key_it == db_.end()) {
+					reply->set_error(ERROR_NO_KEY);
+				} else {
+					reply->set_value(key_it->second);
+					reply->set_error(ERROR_OK);
+				}
+			}
 		} else {
 			std::string cmd;
 			args->SerializeToString(&cmd);
@@ -33,6 +42,20 @@ MessagePtr KvServer::onCommand(std::shared_ptr<KvCommnad> args) {
 			raft.start(cmd, index, term);
 
 			// 等待，直到日志达成一致
+			melon::CoroutineCondition cond;
+			notify_[index] = cond;
+			// TODO:处理超时的情况
+			notify_[index].wait();
+
+			if (args->operation() == GET) {
+				auto key_it = db_.find(args->key());
+				if (key_it == db_.end()) {
+					reply->set_error(ERROR_NO_KEY);
+				} else {
+					reply->set_value(key_it->second);
+					reply->set_error(ERROR_OK);
+				}
+			}
 		}
 
 	}
@@ -40,5 +63,42 @@ MessagePtr KvServer::onCommand(std::shared_ptr<KvCommnad> args) {
 	return reply;
 }
 
+void KvServer::applyFunc(uint32_t, LogEntry log) {
+	KvCommnad cmd;
+	cmd.ParseFromString(log.command());
+	latest_applied_seq_per_client_[cmd.cid()] = cmd.seq();
+	if (cmd.operation() == GET) {
+		//do nothing
+	} else if (cmd.operation() == PUT) {
+		db_[cmd.key()] = cmd.value();
+	} else if (cmd.operation() == APPEND) {
+		db_[cmd.key()] += cmd.value();
+	} else if (cmd.operation() == DELETE) {
+		db_.erase(cmd.key());
+	} else {
+		LOG_ERROR << "invalid command operation";
+	}
 
+	auto it = notify_.find(log.index());
+	if (it != notify_.end()) {
+		it->second.notify();
+		notify_.erase(it);
+	}
+}
+
+}
+
+int main(int args, char* argv[]) {
+	if (args < 4) {
+		printf("Usage: %s server_count me base_port peer_ips\n", argv[0]);
+		return 0;
+	}
+	melon::Scheduler scheduler;
+	scheduler.startAsync();
+
+	uint32_t me = std::atoi(argv[1]);
+	int base_port = std::atoi(argv[2]);
+	melon::IpAddress server_addr(base_port + me);
+	cherry::KvServer kvServer(
+	return 0;
 }
