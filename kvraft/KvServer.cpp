@@ -89,6 +89,10 @@ void KvServer::applyFunc(uint32_t, LogEntry log) {
 }
 
 int main(int args, char* argv[]) {
+	using namespace melon;
+	Logger::setLogLevel(LogLevel::INFO);
+	Singleton<Logger>::getInstance()->addAppender("console", LogAppender::ptr(new ConsoleAppender()));
+
 	if (args < 5) {
 		printf("Usage: %s n me base_port peer_ips\n", argv[0]);
 		return 0;
@@ -101,21 +105,20 @@ int main(int args, char* argv[]) {
 		return 0;
 	}
 
-	melon::Scheduler scheduler;
-	scheduler.startAsync();
+	Scheduler scheduler;
 
 	std::vector<cherry::PolishedRpcClient::Ptr> peers;
 	for (int i = 0; i < n; ++i) {
-		melon::IpAddress peer_addr(argv[4 + i], base_port + i);
+		IpAddress peer_addr(argv[4 + i], base_port + i);
 		peers.push_back(std::make_shared<cherry::PolishedRpcClient>(peer_addr, &scheduler));
 	}
 
-	melon::IpAddress server_addr(base_port + me);
+	IpAddress server_addr(base_port + me);
 	cherry::KvServer kvserver(peers, me, server_addr, &scheduler);
 	sleep(2);
 
 	kvserver.start();
-
-	getchar();
+	printf("%d start\n", me);
+	scheduler.start();
 	return 0;
 }

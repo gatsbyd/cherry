@@ -6,3 +6,4 @@ Makefile
 *.swp
 *.pb.cc
 *.pb.h
+*.out
