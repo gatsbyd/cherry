@@ -41,6 +41,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # ---[ Subdirectories
 add_subdirectory(test)
 add_subdirectory(src)
+add_subdirectory(kvraft)
 
 #message(STATUS "CMAKE_CXX_FLAGS=" "${CMAKE_CXX_FLAGS}")
 

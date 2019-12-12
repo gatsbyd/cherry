@@ -1,5 +1,7 @@
 #include "KvServer.h"
 
+#include <unistd.h>
+
 namespace cherry {
 	
 KvServer::KvServer(const std::vector<PolishedRpcClient::Ptr>& peers, 
@@ -9,11 +11,9 @@ KvServer::KvServer(const std::vector<PolishedRpcClient::Ptr>& peers,
 				: me_(me),
 				  scheduler_(scheduler),
 				  raft(peers, me, addr, scheduler) {
-	melon::rpc::RpcServe& server = raft.getServer();
+	melon::rpc::RpcServer& server = raft.getRpcServer();
 	raft.setApplyFunc(std::bind(&KvServer::applyFunc, this, std::placeholders::_1, std::placeholders::_2));
 	server.registerRpcHandler<KvCommnad>(std::bind(&KvServer::onCommand, this, std::placeholders::_1));
-
-	raft.start();
 }
 
 MessagePtr KvServer::onCommand(std::shared_ptr<KvCommnad> args) {
@@ -89,16 +89,33 @@ void KvServer::applyFunc(uint32_t, LogEntry log) {
 }
 
 int main(int args, char* argv[]) {
-	if (args < 4) {
-		printf("Usage: %s server_count me base_port peer_ips\n", argv[0]);
+	if (args < 5) {
+		printf("Usage: %s n me base_port peer_ips\n", argv[0]);
 		return 0;
 	}
+	int n = std::atoi(argv[1]);
+	uint32_t me = std::atoi(argv[2]);
+	int base_port = std::atoi(argv[3]);
+	if (args < 4 + n) {
+		printf("Usage: %s n me base_port peer_ips\n", argv[0]);
+		return 0;
+	}
+
 	melon::Scheduler scheduler;
 	scheduler.startAsync();
 
-	uint32_t me = std::atoi(argv[1]);
-	int base_port = std::atoi(argv[2]);
+	std::vector<cherry::PolishedRpcClient::Ptr> peers;
+	for (int i = 0; i < n; ++i) {
+		melon::IpAddress peer_addr(argv[4 + i], base_port + i);
+		peers.push_back(std::make_shared<cherry::PolishedRpcClient>(peer_addr, &scheduler));
+	}
+
 	melon::IpAddress server_addr(base_port + me);
-	cherry::KvServer kvServer(
+	cherry::KvServer kvserver(peers, me, server_addr, &scheduler);
+	sleep(2);
+
+	kvserver.start();
+
+	getchar();
 	return 0;
 }

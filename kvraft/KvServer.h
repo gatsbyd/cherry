@@ -16,6 +16,9 @@ public:
 					melon::IpAddress addr, 
 					melon::Scheduler* scheduler);
 
+	void start() { raft.start(); }
+
+private:
 	MessagePtr onCommand(std::shared_ptr<KvCommnad> args);
 	void applyFunc(uint32_t server_id, LogEntry);
 
