@@ -9,7 +9,7 @@
 
 namespace cherry {
 	
-class KvServer {
+class KvServer : public melon::Noncopyable {
 public:
 	KvServer(const std::vector<PolishedRpcClient::Ptr>& peers, 
 					uint32_t me, 
