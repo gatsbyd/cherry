@@ -1,4 +1,5 @@
 #include "KvServer.h"
+#include "common.h"
 
 #include <unistd.h>
 
@@ -25,13 +26,13 @@ MessagePtr KvServer::onCommand(std::shared_ptr<KvCommnad> args) {
 		reply->set_leader(true);
 		auto it = latest_applied_seq_per_client_.find(args->cid());
 		if (it != latest_applied_seq_per_client_.end() && args->seq() <= it->second) {
-			if (args->operation() == GET) {
+			if (args->operation() == operation::GET) {
 				auto key_it = db_.find(args->key());
 				if (key_it == db_.end()) {
-					reply->set_error(ERROR_NO_KEY);
+					reply->set_error(operation::ERROR_NO_KEY);
 				} else {
 					reply->set_value(key_it->second);
-					reply->set_error(ERROR_OK);
+					reply->set_error(operation::ERROR_OK);
 				}
 			}
 		} else {
@@ -47,13 +48,15 @@ MessagePtr KvServer::onCommand(std::shared_ptr<KvCommnad> args) {
 			// TODO:处理超时的情况
 			notify_[index].wait();
 
-			if (args->operation() == GET) {
+			if (args->operation() == operation::GET) {
 				auto key_it = db_.find(args->key());
 				if (key_it == db_.end()) {
-					reply->set_error(ERROR_NO_KEY);
+					reply->set_error(operation::ERROR_NO_KEY);
+					printf("GET: no key %s\n", args->key().c_str());
 				} else {
 					reply->set_value(key_it->second);
-					reply->set_error(ERROR_OK);
+					reply->set_error(operation::ERROR_OK);
+					printf("GET: key %s, value is %s\n", args->key().c_str(), reply->value().c_str());
 				}
 			}
 		}
@@ -67,14 +70,17 @@ void KvServer::applyFunc(uint32_t, LogEntry log) {
 	KvCommnad cmd;
 	cmd.ParseFromString(log.command());
 	latest_applied_seq_per_client_[cmd.cid()] = cmd.seq();
-	if (cmd.operation() == GET) {
+	if (cmd.operation() == operation::GET) {
 		//do nothing
-	} else if (cmd.operation() == PUT) {
+	} else if (cmd.operation() == operation::PUT) {
 		db_[cmd.key()] = cmd.value();
-	} else if (cmd.operation() == APPEND) {
+		printf("PUT: <%s, %s>\n", cmd.key().c_str(), cmd.value().c_str());
+	} else if (cmd.operation() == operation::APPEND) {
 		db_[cmd.key()] += cmd.value();
-	} else if (cmd.operation() == DELETE) {
+		printf("APPEND: <%s, %s>\n", cmd.key().c_str(), cmd.value().c_str());
+	} else if (cmd.operation() == operation::DELETE) {
 		db_.erase(cmd.key());
+		printf("DELETE: key %s\n", cmd.key().c_str());
 	} else {
 		LOG_ERROR << "invalid command operation";
 	}

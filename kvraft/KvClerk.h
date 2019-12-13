@@ -17,8 +17,9 @@ public:
 	void append(const std::string& key, const std::string& value);
 	void del(const std::string& key);
 private:
-	void onCommandReply(std::shared_ptr<KvCommnad> cmd,
-						std::shared_ptr<KvCommnadReply> reply);
+	std::shared_ptr<KvCommnadReply> sendCommand(const std::string& operation,
+									const std::string& key,
+									const std::string& value = "");
 
 	int64_t cid_;
 	uint32_t seq_;
