@@ -36,7 +36,7 @@ Raft::Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon:
 }
 
 Raft::~Raft() {
-	LOG_INFO << "~Raft()";
+	LOG_DEBUG << "~Raft()";
 }
 
 void Raft::start() {
@@ -53,14 +53,14 @@ bool Raft::start(const std::string& cmd, uint32_t& index, uint32_t& term) {
 		entry.set_index(index);
 		entry.set_command(cmd);
 		log_.push_back(entry);
-		LOG_INFO << toString() << " :receive new command " << cmd;
+		LOG_DEBUG << toString() << " :receive new command " << cmd;
 	}
 	return is_leader;
 }
 
 void Raft::quit() {
 	running_ = false;
-	LOG_INFO << toString() << " :quit";
+	LOG_DEBUG << toString() << " :quit";
 }
 
 void Raft::poll() {
@@ -73,7 +73,7 @@ void Raft::poll() {
 	vote_args->set_candidate_id(me_);
 	vote_args->set_last_log_term(getLogEntryAt(getLastEntryIndex()).term());
 	vote_args->set_last_log_index(getLastEntryIndex());
-	LOG_INFO << toString() << " :send vote rpc";
+	LOG_DEBUG << toString() << " :send vote rpc";
 
 	for (size_t i = 0; i < peers_.size(); ++i) {
 		if (i != me_) {
@@ -90,9 +90,9 @@ bool Raft::sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vot
 }
 
 void Raft::onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::shared_ptr<RequestVoteReply> vote_reply) {
-	LOG_INFO << toString() << " :onRequestVoteReply";
+	LOG_DEBUG << toString() << " :onRequestVoteReply";
 	if (current_term_ < vote_reply->term()) {
-		LOG_INFO << toString() << " failed to election, become follower";
+		LOG_DEBUG << toString() << " failed to election, become follower";
 		turnToFollower(vote_reply->term());
 	} else if (vote_reply->vote_granted() && state_ == Candidate && vote_args->term() == current_term_) {
 		voted_gain_++;
@@ -103,13 +103,13 @@ void Raft::onRequestVoteReply(std::shared_ptr<RequestVoteArgs> vote_args, std::s
 }
 
 MessagePtr Raft::onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args) {
-	LOG_INFO << toString() << " onRequestVote";
+	LOG_DEBUG << toString() << " onRequestVote";
 	std::shared_ptr<RequestVoteReply> vote_reply = std::make_shared<RequestVoteReply>();
 	//第一种情况args.Term < rf.currentTerm:直接返回false
 	if (vote_args->term() < current_term_) {
 		vote_reply->set_term(current_term_);
 		vote_reply->set_vote_granted(false);
-		LOG_INFO << toString() << " rejected " << vote_args->candidate_id() << "'s vote request, args.term=" << vote_args->term();
+		LOG_DEBUG << toString() << " rejected " << vote_args->candidate_id() << "'s vote request, args.term=" << vote_args->term();
 	} else {
 		//第二种情况args.Term > rf.currentTerm:变为follower并且重置voteFor为空
 		if (vote_args->term() > current_term_) {
@@ -121,10 +121,10 @@ MessagePtr Raft::onRequestVote(std::shared_ptr<RequestVoteArgs> vote_args) {
 		if (voted_for_ == -1 && !thisIsMoreUpToDate(vote_args->last_log_index(), vote_args->last_log_term())) {
 			voted_for_ = vote_args->candidate_id();		
 			vote_reply->set_vote_granted(true);
-			LOG_INFO << toString() << " vote for " << vote_args->candidate_id();
+			LOG_DEBUG << toString() << " vote for " << vote_args->candidate_id();
 		} else {
 			vote_reply->set_vote_granted(false);
-			LOG_INFO << toString() << " rejected " << vote_args->candidate_id() << "'s vote request, vote_for=" << voted_for_;
+			LOG_DEBUG << toString() << " rejected " << vote_args->candidate_id() << "'s vote request, vote_for=" << voted_for_;
 		}
 	}
 
@@ -150,7 +150,7 @@ void Raft::heartbeat() {
 			sendRequestAppend(i, append_args);
 		}
 	}
-	LOG_INFO << toString() << " :send append rpc";
+	LOG_DEBUG << toString() << " :send append rpc";
 }
 
 bool Raft::sendRequestAppend(uint32_t target_server, std::shared_ptr<RequestAppendArgs> append_args) {
@@ -167,7 +167,7 @@ void Raft::onRequestAppendReply(uint32_t target_server, std::shared_ptr<RequestA
 		//成功后更新leader的nextIndex和matchIndex，并且更新commitIndex
 		match_index_[target_server] = append_args->pre_log_index() + append_args->entries_size();
 		next_index_[target_server] = match_index_[target_server] + 1;
-		LOG_INFO << toString() << " update next_index[" << target_server << "] to " << next_index_[target_server];
+		LOG_DEBUG << toString() << " update next_index[" << target_server << "] to " << next_index_[target_server];
 		updateCommitIndex();
 	} else { //返回false有两种原因:1.出现term比当前server大的， 2.参数中的PreLogIndex对应的Term和目标server中index对应的Term不一致
 		if (append_args->term() < append_reply->term()) {
@@ -194,13 +194,13 @@ void Raft::onRequestAppendReply(uint32_t target_server, std::shared_ptr<RequestA
 			new_args->set_leader_commit(commit_index_);
 			constructLog(next_index, new_args);
 			sendRequestAppend(target_server, new_args);
-			LOG_INFO << toString() << ": resend append rpc to " << target_server << " change pre_log_index to " << next_index - 1;
+			LOG_DEBUG << toString() << ": resend append rpc to " << target_server << " change pre_log_index to " << next_index - 1;
 		}
 	}
 }
 
 MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_args) {
-	LOG_INFO << toString() << " :receive append rpc from " << append_args->leader_id() << ", pre_log_index=" 
+	LOG_DEBUG << toString() << " :receive append rpc from " << append_args->leader_id() << ", pre_log_index=" 
 			<< append_args->pre_log_index() << ", pre_log_term=" << append_args->pre_log_term();
 	std::shared_ptr<RequestAppendReply> append_reply = std::make_shared<RequestAppendReply>();
 	append_reply->set_term(current_term_);
@@ -221,7 +221,7 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 			append_reply->set_conflict_index(0);
 			append_reply->set_conflict_term(0);
 
-			LOG_INFO << toString() << " got " << append_args->entries_size() << " entry from " << append_args->leader_id();
+			LOG_DEBUG << toString() << " got " << append_args->entries_size() << " entry from " << append_args->leader_id();
 
 			if (append_args->entries_size() > 0) {
 				log_.erase(log_.begin() + pre_log_index + 1, log_.end());
@@ -254,7 +254,7 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 			if (pre_log_index > getLastEntryIndex()) {
 				append_reply->set_conflict_index(log_.size());
 				append_reply->set_conflict_term(0);
-				LOG_INFO << toString() << " onRequestAppendEntry(), pre_log_index=" << pre_log_index << " > getLastEntryIndex=" << getLastEntryIndex();
+				LOG_DEBUG << toString() << " onRequestAppendEntry(), pre_log_index=" << pre_log_index << " > getLastEntryIndex=" << getLastEntryIndex();
 			} else {
 				append_reply->set_conflict_term(getLogEntryAt(pre_log_index).term());
 				uint32_t i = pre_log_index;
@@ -262,7 +262,7 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 					i--;
 				}
 				append_reply->set_conflict_index(i + 1);
-				LOG_INFO << toString() << ": conflict_index=" << append_reply->conflict_index() << ", conflict_term=" << append_reply->conflict_term();
+				LOG_DEBUG << toString() << ": conflict_index=" << append_reply->conflict_index() << ", conflict_term=" << append_reply->conflict_term();
 			}
 		}
 	}
@@ -273,46 +273,46 @@ MessagePtr Raft::onRequestAppendEntry(std::shared_ptr<RequestAppendArgs> append_
 void Raft::turnToFollower(uint32_t term) {
 	if (state_ == Leader) {
 		scheduler_->cancel(hearbeat_id_);
-		LOG_INFO << toString() << " :cancel hearbeat_id " << hearbeat_id_;
+		LOG_DEBUG << toString() << " :cancel hearbeat_id " << hearbeat_id_;
 	} else {
 		scheduler_->cancel(timeout_id_);
-		LOG_INFO << toString() << " :cancel timeout_id " << timeout_id_;
+		LOG_DEBUG << toString() << " :cancel timeout_id " << timeout_id_;
 	}
 	state_ = Follower;
-	LOG_INFO << toString() << " :become Follower";
+	LOG_DEBUG << toString() << " :become Follower";
 	current_term_ = term;
 	voted_for_ = -1;
 	voted_gain_ = 0;
 	timeout_id_ = scheduler_->runAfter(getElectionTimeout() * 1000, 
 							std::make_shared<melon::Coroutine>(std::bind(&Raft::turnToCandidate, this)));
-	LOG_INFO << toString() << " :timeout_id " << timeout_id_;
+	LOG_DEBUG << toString() << " :timeout_id " << timeout_id_;
 }
 
 void Raft::turnToCandidate() {
 	scheduler_->cancel(timeout_id_);
-	LOG_INFO << toString() << " :cancel timeout_id " << timeout_id_;
+	LOG_DEBUG << toString() << " :cancel timeout_id " << timeout_id_;
 	state_ = Candidate;
 	current_term_ += 1;
 	voted_for_ = me_;
 	voted_gain_ = 1;
 
-	LOG_INFO << toString() << " :become Candidate";
+	LOG_DEBUG << toString() << " :become Candidate";
 	poll();
 	timeout_id_ = scheduler_->runAfter(getElectionTimeout() * 1000, 
 										std::make_shared<melon::Coroutine>(std::bind(&Raft::turnToCandidate, this)));
-	LOG_INFO << toString() << " :timeout_id " << timeout_id_;
+	LOG_DEBUG << toString() << " :timeout_id " << timeout_id_;
 }
 
 void Raft::turnToLeader() {
 	scheduler_->cancel(timeout_id_);
-	LOG_INFO << toString() << " :cancel timeout_id " << timeout_id_;
+	LOG_DEBUG << toString() << " :cancel timeout_id " << timeout_id_;
 	state_ = Leader;
-	LOG_INFO << toString() << " :become Leader";
+	LOG_DEBUG << toString() << " :become Leader";
 	resetLeaderState();
 	heartbeat();
 	hearbeat_id_ = scheduler_->runEvery(heartbeat_interval_ * 1000,
 											std::make_shared<melon::Coroutine>(std::bind(&Raft::heartbeat, this)));
-	LOG_INFO << toString() << " :hearbeat_id " << hearbeat_id_;
+	LOG_DEBUG << toString() << " :hearbeat_id " << hearbeat_id_;
 }
 
 bool Raft::isLeader() {
@@ -397,7 +397,7 @@ void Raft::setApplyFunc(ApplyFunc apply_func) {
 
 void Raft::defaultApplyFunc(u_int32_t server_id, LogEntry entry) {
 	(void) server_id;
-	LOG_INFO << toString() << " :apply msg index=" << entry.index();
+	LOG_DEBUG << toString() << " :apply msg index=" << entry.index();
 }
 
 void Raft::updateCommitIndex() {
