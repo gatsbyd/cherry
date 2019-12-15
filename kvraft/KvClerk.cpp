@@ -59,14 +59,27 @@ std::shared_ptr<KvCommnadReply> KvClerk::sendCommand(const std::string& operatio
 											std::bind([&reply, &cond](std::shared_ptr<KvCommnadReply> response){
 														reply = response;
 														cond.notify();
+														printf("notify\n");
 													}, std::placeholders::_1));
 		melon::MutexGuard lock(mutex);
 		bool is_timeout = cond.wait_seconds(3);
+		if (is_timeout) {
+			printf("timeout\n");
+		} else {
+			if (reply->leader()) {
+				printf("%d is leader\n", latest_leader_id_);
+			} else {
+				printf("%d is not leader\n", latest_leader_id_);
+			}
+		}
 		if (is_timeout || !reply || !reply->leader()) { 
-			latest_leader_id_++;
+			++latest_leader_id_;
+			latest_leader_id_ %= peers_.size();
+			printf("retry server %d\n", latest_leader_id_);
 			continue;
 		} else {
 			seq_++;
+			printf("return reply\n");
 			return reply;
 		}
 	}

@@ -46,7 +46,9 @@ MessagePtr KvServer::onCommand(std::shared_ptr<KvCommnad> args) {
 			melon::CoroutineCondition cond;
 			notify_[index] = cond;
 			// TODO:处理超时的情况
+			LOG_DEBUG << "wait for index " << index;
 			notify_[index].wait();
+			LOG_DEBUG << "log at " << index << " commited";
 
 			if (args->operation() == operation::GET) {
 				auto key_it = db_.find(args->key());
@@ -66,7 +68,8 @@ MessagePtr KvServer::onCommand(std::shared_ptr<KvCommnad> args) {
 	return reply;
 }
 
-void KvServer::applyFunc(uint32_t, LogEntry log) {
+void KvServer::applyFunc(uint32_t server_id, LogEntry log) {
+	LOG_INFO << server_id << "commit log at " << log.index();
 	KvCommnad cmd;
 	cmd.ParseFromString(log.command());
 	latest_applied_seq_per_client_[cmd.cid()] = cmd.seq();
@@ -96,16 +99,21 @@ void KvServer::applyFunc(uint32_t, LogEntry log) {
 
 int main(int args, char* argv[]) {
 	using namespace melon;
-	Logger::setLogLevel(LogLevel::INFO);
-	Singleton<Logger>::getInstance()->addAppender("console", LogAppender::ptr(new ConsoleAppender()));
-
-	if (args < 5) {
+	if (args < 3) {
 		printf("Usage: %s n me base_port peer_ips\n", argv[0]);
 		return 0;
 	}
+
 	int n = std::atoi(argv[1]);
 	uint32_t me = std::atoi(argv[2]);
 	int base_port = std::atoi(argv[3]);
+
+	//Logger::setLogLevel(LogLevel::INFO);
+	std::shared_ptr<AsyncFileAppender> file_appender = std::make_shared<AsyncFileAppender>(std::to_string(me));
+	file_appender->start();
+	Singleton<Logger>::getInstance()->addAppender("file", file_appender);
+	//Singleton<Logger>::getInstance()->addAppender("console", LogAppender::ptr(new ConsoleAppender());
+
 	if (args < 4 + n) {
 		printf("Usage: %s n me base_port peer_ips\n", argv[0]);
 		return 0;
@@ -124,7 +132,7 @@ int main(int args, char* argv[]) {
 	sleep(2);
 
 	kvserver.start();
-	printf("%d start\n", me);
+	printf("server %d start\n", me);
 	scheduler.start();
 	return 0;
 }

@@ -24,7 +24,7 @@ Raft::Raft(const std::vector<PolishedRpcClient::Ptr>& peers, uint32_t me, melon:
 		server_.registerRpcHandler<RequestVoteArgs>(std::bind(&Raft::onRequestVote, this, std::placeholders::_1));
 		server_.registerRpcHandler<RequestAppendArgs>(std::bind(&Raft::onRequestAppendEntry, this, std::placeholders::_1));
 		server_.start();
-		//todo:read log_, voted_for_, current_term_ from persistent
+		//TODO:read log_, voted_for_, current_term_ from persistent
 
 		//Figure 2表明logs下标从1开始，所以添加一个空的Entry
 		LogEntry entry;
@@ -53,7 +53,7 @@ bool Raft::start(const std::string& cmd, uint32_t& index, uint32_t& term) {
 		entry.set_index(index);
 		entry.set_command(cmd);
 		log_.push_back(entry);
-		LOG_DEBUG << toString() << " :receive new command " << cmd;
+		LOG_INFO << toString() << " :receive new command " << cmd;
 	}
 	return is_leader;
 }
@@ -73,7 +73,6 @@ void Raft::poll() {
 	vote_args->set_candidate_id(me_);
 	vote_args->set_last_log_term(getLogEntryAt(getLastEntryIndex()).term());
 	vote_args->set_last_log_index(getLastEntryIndex());
-	LOG_DEBUG << toString() << " :send vote rpc";
 
 	for (size_t i = 0; i < peers_.size(); ++i) {
 		if (i != me_) {
@@ -85,6 +84,7 @@ void Raft::poll() {
 
 bool Raft::sendRequestVote(uint32_t server, std::shared_ptr<RequestVoteArgs> vote_args) {
 	assert(server < peers_.size());
+	LOG_DEBUG << toString() << " :send vote rpc to " << server;
 	return peers_[server]->Call<RequestVoteReply>(vote_args, 
 					std::bind(&Raft::onRequestVoteReply, this, vote_args, std::placeholders::_1));
 }
@@ -150,11 +150,11 @@ void Raft::heartbeat() {
 			sendRequestAppend(i, append_args);
 		}
 	}
-	LOG_DEBUG << toString() << " :send append rpc";
 }
 
 bool Raft::sendRequestAppend(uint32_t target_server, std::shared_ptr<RequestAppendArgs> append_args) {
 	assert(target_server < peers_.size());
+	LOG_DEBUG << toString() << " :send append rpc to " << target_server;
 	return peers_[target_server]->Call<RequestAppendReply>(append_args, 
 					std::bind(&Raft::onRequestAppendReply, this, target_server, append_args, std::placeholders::_1));
 }
@@ -370,7 +370,7 @@ std::string Raft::toString() {
 	std::ostringstream os;
 	os << "server(id=" << me_ << ", state=" << stateString() << ", term=" << current_term_ << ", log=[";
 	for (const LogEntry& entry : log_) {
-		os << "<index=" << entry.index() << ", term=" << entry.term() << ", cmd=" << entry.command() << "> ";
+		os << "<index=" << entry.index() << ", term=" << entry.term() << ">";
 	}
 	os << "], peers(";
 	for (const PolishedRpcClient::Ptr& peer : peers_) {
