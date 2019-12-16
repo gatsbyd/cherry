@@ -1,6 +1,8 @@
 #include "KvClerk.h"
 #include "common.h"
 
+#include <sstream>
+
 namespace cherry {
 
 KvClerk::KvClerk(int64_t cid, 
@@ -16,10 +18,8 @@ bool KvClerk::get(const std::string& key, std::string& value) {
 	std::shared_ptr<KvCommnadReply> reply = sendCommand(operation::GET, key);
 	if (reply->error() == operation::ERROR_OK) {
 		value = reply->value();
-		printf("GET: key %s, value = %s\n", key.c_str(), value.c_str());
 		return true;
 	}
-	printf("GET: no key %s\n", key.c_str());
 	return false;
 }
 	
@@ -59,32 +59,46 @@ std::shared_ptr<KvCommnadReply> KvClerk::sendCommand(const std::string& operatio
 											std::bind([&reply, &cond](std::shared_ptr<KvCommnadReply> response){
 														reply = response;
 														cond.notify();
-														printf("notify\n");
+														//printf("notify\n");
 													}, std::placeholders::_1));
 		melon::MutexGuard lock(mutex);
 		bool is_timeout = cond.wait_seconds(1);
 		if (is_timeout) {
-			printf("timeout\n");
+			//printf("timeout\n");
 		} else {
 			if (reply->leader()) {
-				printf("%d is leader\n", latest_leader_id_);
+				//printf("%d is leader\n", latest_leader_id_);
 			} else {
-				printf("%d is not leader\n", latest_leader_id_);
+				//printf("%d is not leader\n", latest_leader_id_);
 			}
 		}
 		if (is_timeout || !reply || !reply->leader()) { 
 			++latest_leader_id_;
 			latest_leader_id_ %= peers_.size();
-			printf("retry server %d\n", latest_leader_id_);
+			//printf("retry server %d\n", latest_leader_id_);
 			continue;
 		} else {
 			seq_++;
-			printf("return reply\n");
+			//printf("return reply\n");
 			return reply;
 		}
 	}
 }
 
+}
+
+void usage(std::string operation) {
+	if (operation == "get") {
+		printf("Usage:get key\n");
+	} else if (operation == "put") {
+		printf("Usage:put key value\n");
+	} else if (operation == "append") {
+		printf("Usage:append key value\n");
+	} else if (operation == "delete") {
+		printf("Usage:delete key\n");
+	} else {
+		printf("unknown operation\n");
+	}
 }
 
 int main(int argc, char* argv[]) {
@@ -110,6 +124,50 @@ int main(int argc, char* argv[]) {
 
 	//TODO:保证每个clerk的cid唯一
 	KvClerk clerk(std::rand(), peers);
+	std::string line, word;
+	std::vector<std::string> words;
+	while (getline(std::cin, line)) {
+		words.clear();
+		std::istringstream cmd(line);
+		while (cmd >> word) {
+			words.push_back(word);
+		}
+		if (words.size() == 0) {
+			continue;
+		}
+		if (words[0] == "get") {
+			if (words.size() < 2) {
+				usage(words[0]);
+			}
+			std::string value;
+			bool exist = clerk.get(words[1], value);
+			if (exist) {
+				printf("value:%s\n", value.c_str());
+			} else {
+				printf("no such key\n");
+			}
+		} else if (words[0] == "put") {
+			if (words.size() < 3) {
+				usage(words[0]);
+			}
+			clerk.put(words[1], words[2]);
+		} else if (words[0] == "append") {
+			if (words.size() < 3) {
+				usage(words[0]);
+			}
+			clerk.append(words[1], words[2]);
+		} else if (words[0] == "delete") {
+			if (words.size() < 2) {
+				usage(words[0]);
+			}
+			clerk.del(words[1]);
+		} else if (words[0] == "quit") {
+			printf("bye\n");
+			break;
+		} else {
+			usage(words[0]);
+		}			
+	}
 
 	return 0;
 }

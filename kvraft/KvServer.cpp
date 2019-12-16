@@ -52,11 +52,9 @@ MessagePtr KvServer::onCommand(std::shared_ptr<KvCommnad> args) {
 				auto key_it = db_.find(args->key());
 				if (key_it == db_.end()) {
 					reply->set_error(operation::ERROR_NO_KEY);
-					LOG_INFO << "server " << me_ << ", GET: no key " << args->key();
 				} else {
 					reply->set_value(key_it->second);
 					reply->set_error(operation::ERROR_OK);
-					LOG_INFO << "server " << me_ << ", GET: key " << args->key() << ", return value " << reply->value();
 				}
 			}
 		}
@@ -72,6 +70,7 @@ void KvServer::applyFunc(uint32_t server_id, LogEntry log) {
 	cmd.ParseFromString(log.command());
 	latest_applied_seq_per_client_[cmd.cid()] = cmd.seq();
 	if (cmd.operation() == operation::GET) {
+		LOG_INFO << "server " << me_ << ", GET: key " << cmd.key();
 		//do nothing
 	} else if (cmd.operation() == operation::PUT) {
 		db_[cmd.key()] = cmd.value();

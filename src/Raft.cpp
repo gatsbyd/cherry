@@ -53,7 +53,7 @@ bool Raft::start(const std::string& cmd, uint32_t& index, uint32_t& term) {
 		entry.set_index(index);
 		entry.set_command(cmd);
 		log_.push_back(entry);
-		LOG_INFO << toString() << " :receive new command " << cmd;
+		LOG_DEBUG << toString() << " :receive new command " << cmd;
 	}
 	return is_leader;
 }
