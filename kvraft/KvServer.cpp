@@ -46,19 +46,17 @@ MessagePtr KvServer::onCommand(std::shared_ptr<KvCommnad> args) {
 			melon::CoroutineCondition cond;
 			notify_[index] = cond;
 			// TODO:处理超时的情况
-			LOG_DEBUG << "wait for index " << index;
 			notify_[index].wait();
-			LOG_DEBUG << "log at " << index << " commited";
 
 			if (args->operation() == operation::GET) {
 				auto key_it = db_.find(args->key());
 				if (key_it == db_.end()) {
 					reply->set_error(operation::ERROR_NO_KEY);
-					printf("GET: no key %s\n", args->key().c_str());
+					LOG_INFO << "server " << me_ << ", GET: no key " << args->key();
 				} else {
 					reply->set_value(key_it->second);
 					reply->set_error(operation::ERROR_OK);
-					printf("GET: key %s, value is %s\n", args->key().c_str(), reply->value().c_str());
+					LOG_INFO << "server " << me_ << ", GET: key " << args->key() << ", return value " << reply->value();
 				}
 			}
 		}
@@ -69,7 +67,7 @@ MessagePtr KvServer::onCommand(std::shared_ptr<KvCommnad> args) {
 }
 
 void KvServer::applyFunc(uint32_t server_id, LogEntry log) {
-	LOG_INFO << server_id << "commit log at " << log.index();
+	LOG_INFO << "server " << server_id << " commit log at " << log.index();
 	KvCommnad cmd;
 	cmd.ParseFromString(log.command());
 	latest_applied_seq_per_client_[cmd.cid()] = cmd.seq();
@@ -77,13 +75,13 @@ void KvServer::applyFunc(uint32_t server_id, LogEntry log) {
 		//do nothing
 	} else if (cmd.operation() == operation::PUT) {
 		db_[cmd.key()] = cmd.value();
-		printf("PUT: <%s, %s>\n", cmd.key().c_str(), cmd.value().c_str());
+		LOG_INFO << "server " << me_ << ", PUT: key " << cmd.key() << ", value " << cmd.value();
 	} else if (cmd.operation() == operation::APPEND) {
 		db_[cmd.key()] += cmd.value();
-		printf("APPEND: <%s, %s>\n", cmd.key().c_str(), cmd.value().c_str());
+		LOG_INFO << "server " << me_ << ", APPEND: key " << cmd.key() << ", value " << cmd.value();
 	} else if (cmd.operation() == operation::DELETE) {
 		db_.erase(cmd.key());
-		printf("DELETE: key %s\n", cmd.key().c_str());
+		LOG_INFO << "server " << me_ << ", DELETE: key " << cmd.key();
 	} else {
 		LOG_ERROR << "invalid command operation";
 	}
@@ -108,11 +106,11 @@ int main(int args, char* argv[]) {
 	uint32_t me = std::atoi(argv[2]);
 	int base_port = std::atoi(argv[3]);
 
-	//Logger::setLogLevel(LogLevel::INFO);
-	std::shared_ptr<AsyncFileAppender> file_appender = std::make_shared<AsyncFileAppender>(std::to_string(me));
-	file_appender->start();
-	Singleton<Logger>::getInstance()->addAppender("file", file_appender);
-	//Singleton<Logger>::getInstance()->addAppender("console", LogAppender::ptr(new ConsoleAppender());
+	Logger::setLogLevel(LogLevel::INFO);
+	//std::shared_ptr<AsyncFileAppender> file_appender = std::make_shared<AsyncFileAppender>(std::to_string(me));
+	//file_appender->start();
+	//Singleton<Logger>::getInstance()->addAppender("file", file_appender);
+	Singleton<Logger>::getInstance()->addAppender("console", LogAppender::ptr(new ConsoleAppender()));
 
 	if (args < 4 + n) {
 		printf("Usage: %s n me base_port peer_ips\n", argv[0]);
@@ -129,7 +127,7 @@ int main(int args, char* argv[]) {
 
 	IpAddress server_addr(base_port + me);
 	cherry::KvServer kvserver(peers, me, server_addr, &scheduler);
-	sleep(2);
+	sleep(1);
 
 	kvserver.start();
 	printf("server %d start\n", me);

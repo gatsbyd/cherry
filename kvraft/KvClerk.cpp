@@ -62,7 +62,7 @@ std::shared_ptr<KvCommnadReply> KvClerk::sendCommand(const std::string& operatio
 														printf("notify\n");
 													}, std::placeholders::_1));
 		melon::MutexGuard lock(mutex);
-		bool is_timeout = cond.wait_seconds(3);
+		bool is_timeout = cond.wait_seconds(1);
 		if (is_timeout) {
 			printf("timeout\n");
 		} else {
@@ -110,7 +110,6 @@ int main(int argc, char* argv[]) {
 
 	//TODO:保证每个clerk的cid唯一
 	KvClerk clerk(std::rand(), peers);
-	clerk.put("k1", "v1");
 
 	return 0;
 }
