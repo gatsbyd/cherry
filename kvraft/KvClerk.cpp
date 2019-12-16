@@ -138,6 +138,7 @@ int main(int argc, char* argv[]) {
 		if (words[0] == "get") {
 			if (words.size() < 2) {
 				usage(words[0]);
+				continue;
 			}
 			std::string value;
 			bool exist = clerk.get(words[1], value);
@@ -149,16 +150,19 @@ int main(int argc, char* argv[]) {
 		} else if (words[0] == "put") {
 			if (words.size() < 3) {
 				usage(words[0]);
+				continue;
 			}
 			clerk.put(words[1], words[2]);
 		} else if (words[0] == "append") {
 			if (words.size() < 3) {
 				usage(words[0]);
+				continue;
 			}
 			clerk.append(words[1], words[2]);
 		} else if (words[0] == "delete") {
 			if (words.size() < 2) {
 				usage(words[0]);
+				continue;
 			}
 			clerk.del(words[1]);
 		} else if (words[0] == "quit") {
@@ -166,6 +170,7 @@ int main(int argc, char* argv[]) {
 			break;
 		} else {
 			usage(words[0]);
+			continue;
 		}			
 	}
 
