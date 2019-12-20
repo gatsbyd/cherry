@@ -5,15 +5,88 @@
 本项目依赖我的另一个项目[melon](https://github.com/gatsbyd/melon)
 和[Protocol Buffers](https://developers.google.com/protocol-buffers)。
 
-首先将melon cl本地，然后在melon主目录下新建build目录，进入build目录执行：
+首先将melon clone到本地，然后在melon主目录下新建build目录，进入build目录执行：
 ```
 cmake ..
 make
 make install 
 ```
 
-提前安装好Protocol Buffers，然后将cherry cl本m，进入src目录执行：
-wer的log为：[index1, term=1, cmd1]，[index=2, term=1, cmd4]
+提前安装好Protocol Buffers，然后将cherry clone到本地，进入src目录执行：
+```
+protoc -I=. --cpp_out=. args.proto
+```
+将args.proto文件编译成cpp代码。
+然后在cherry主目录下新建build目录，进入build目录执行：
+```
+cmake ..
+make 
+```
+
+# 算法描述
+raft算法之所以简单的原因之一是它将问题分解成三个子问题，分别是：
+1. Leader选举
+2. Log复制
+3. 安全性保证
+
+## 概述
+raft协议中每个server都要维护一些状态，并且对外提供两个RPC调用分别是RequestVote RPC和AppendEntries RPC用于选举和log复制。
+**要想理解raft，其实就是搞明白：**
+1. leader和follower需要维护哪些变量，每个变量的含义
+2. leader什么时候发送AppendEntries RPC，携带哪些参数，follower收到请求后做什么？leader收到响应后做什么？
+3. candidate什么时候发送RequestVote RPC，携带哪些参数，follower收到请求后做什么？candidate收到响应后做什么？
+
+### 状态
+![states](
+https://blog-1253119293.cos.ap-beijing.myqcloud.com/6.824/raft/raft-state.png)
+
+### RequestVote RPC
+![vote rpc](https://blog-1253119293.cos.ap-beijing.myqcloud.com/6.824/raft/raft-requestvote.png)
+
+### AppendEntries RPC
+![append rpc](https://blog-1253119293.cos.ap-beijing.myqcloud.com/6.824/raft/raft-requestappend.png)
+
+
+
+raft所有的操作都是为了保证如下这些性质。
+## raft算法保证的性质
+1. **Election Safety**: at most one leader can be elected in a given term.
+2. **Leader Append-Only**: a leader never overwrites or deletes entries in its log; it only appends new entries.
+3. **Log Matching**: if two logs contain an entry with the same index and term, then the logs are identical in all entries up through the given index.
+4. **Leader Completeness**: if a log entry is committed in a given term, then that entry will be present in the logs of the leaders for all higher-numbered terms.
+5. **State Machine Safety**: if a server has applied a log entry at a given index to its state machine, no other server will ever apply a different log entry for the same index.
+
+暂时可以先不看，需要知道的是raft所有的规则都是为了保证上面的这些性质，而这些性质又是保证raft正确的前提。
+
+## Leader选举
+**Election Safety**性质说的在某个term中最多只能选出一个leader。
+有如下这些规则：
+1. raft将时间划分为term，每个term都有一个number，每个term以选举一个leader开始。
+2. 每个server有三种状态：leader, follower, candidate。![states](https://blog-1253119293.cos.ap-beijing.myqcloud.com/6.824/raft/raft-states.png)
+3. 作为follower：有一个称为election timeout的倒计时，如果在倒计时内没有收到有效的AppendEntries RPC，将转换为candidate，增加自己的term number，投自己一票，然后通过RequestVote RPC通知集群中的其他server进行投票。当半数以上的RequestVote RPC返回true后，这个candidate将转换为leader。
+4. 某个server收到RequestVote RPC后如何确定要不要投赞同票？同时满足以下三个条件则投赞同，RequestVote RPC返回成功：
+    1. 在当前周期内还没有投过票
+    2. candidate中term不小于自己的term
+    3. **"选举限制"(这是论文在5.4 Safety这一小节给的一个restriction补充)** ：想要获得投票，candidate的logs必须比当前follower的logs更up-to-date。如何比较两个logs的up-to-date程度？最后一个log entry的term大的更up-to-date， 如果term一样，index越大越up-to-date。（**这一restriction保证了Leader Completeness Property，这个属性说的是：作为leader必须要有已经被commit的log，很容易理解，leader作为log分发的源头，如果leader自己都没办法保证自己的log包含了所有已经commit的log，那么怎么保证其他的follower的log能正确**）
+5. 作为leader：周期性的发送AppendEntries RPC。
+
+## Log拷贝
+### Entry格式
+Logs由Entries组成，每个Entry包含一个term和命令，格式如下：
+![log](
+https://blog-1253119293.cos.ap-beijing.myqcloud.com/6.824/raft/raft-log.png)
+
+### 日志拷贝的过程
+1. leader接收客户端的Entry，将Entry添加自己的logs中。
+2. leader周期性使用AppendEntries RPC将新的entry备份到其它server。
+3. follower收到AppendEntries RPC后做什么？进行**一致性检查**。
+#### 一致性检查
+follower收到AppendEntries RPCs后，会进行一致性检查。
+leader为每个follower维护一个nextIndex变量，新上位的leader的nextIndex初始化为当前logs的最后一个log的index+1。
+
+##### 实例分析
+假设leader的logs为：[index1, term=1, cmd1]，[index=2, term=3, cmd2]， [index=3, term=3, cmd3]
+假设某个follower的log为：[index1, term=1, cmd1]，[index=2, term=1, cmd4]
 
 第一次leader的AppendEntries RPC发给某个follower的log为[index=3, term=3, cmd3]这一个log entry，那么AppendEntries RPC同时会携带preLogIndex和preLogTerm两个参数，preLogIndex为要发送的log的前一个index，这里是2。preLogTerm为leader index为1位置的log的term，这里是3。
 
@@ -131,7 +204,7 @@ RaftA(√, 【101，103】)          RaftB(X, 【101，103】)           RaftC(�
 RaftA(√, 【101，103，104】)          RaftB(√, 【101，103，104】)           RaftC(√, 【101，103，104】)
 ```
 
-#### （Raft_Backup_test.cpp）
+#### 综合情况（Raft_Backup_test.cpp）
 ```
 RaftA(√)          RaftB(√)           RaftC(√)         RaftD(√）       RaftD(√)
 假设最开始RaftA是leader1，将RaftB, RaftC, RaftD断开网络连接。
@@ -153,81 +226,12 @@ RaftA(√)          RaftB(√)           RaftC(√)         RaftD(√）       R
 以上这些测试，我都在本地跑过了150次。
 
 
+TODO:
+1. 日志压缩。
+2. 完善测试用例。
+
 参考资料：
 1. [raft论文](https://pdos.csail.mit.edu/6.824/papers/raft-extended.pdf)
 2. [6.824 raft相关lecture](https://pdos.csail.mit.edu/6.824/notes/l-raft.txt)
 3. [raft faq](https://pdos.csail.mit.edu/6.824/papers/raft-faq.txt)
 4. [students-guide-to-raft](https://thesquareplanet.com/blog/students-guide-to-raft/)
-```
-protoc -I=. --cpp_out=. args.proto
-```
-将args.proto文件编译成cpp代码。
-然后在cherry主目录下新建build目录，进入build目录执行：
-```
-cmake ..
-make 
-```
-
-# 算法描述
-raft算法之所以简单的原因之一是它将问题分解成三个子问题，分别是：
-1. Leader选举
-2. Log复制
-3. 安全性保证
-
-## 概述
-raft协议中每个server都要维护一些状态，并且对外提供两个RPC调用分别是RequestVote RPC和AppendEntries RPC用于选举和log复制。
-**要想理解raft，其实就是搞明白：**
-1. leader和follower需要维护哪些变量，每个变量的含义
-2. leader什么时候发送AppendEntries RPC，携带哪些参数，follower收到请求后做什么？leader收到响应后做什么？
-3. candidate什么时候发送RequestVote RPC，携带哪些参数，follower收到请求后做什么？candidate收到响应后做什么？
-
-### 状态
-![states](
-https://blog-1253119293.cos.ap-beijing.myqcloud.com/6.824/raft/raft-state.png)
-
-### RequestVote RPC
-![vote rpc](https://blog-1253119293.cos.ap-beijing.myqcloud.com/6.824/raft/raft-requestvote.png)
-
-### AppendEntries RPC
-![append rpc](https://blog-1253119293.cos.ap-beijing.myqcloud.com/6.824/raft/raft-requestappend.png)
-
-
-
-raft所有的操作都是为了保证如下这些性质。
-## raft算法保证的性质
-1. **Election Safety**: at most one leader can be elected in a given term.
-2. **Leader Append-Only**: a leader never overwrites or deletes entries in its log; it only appends new entries.
-3. **Log Matching**: if two logs contain an entry with the same index and term, then the logs are identical in all entries up through the given index.
-4. **Leader Completeness**: if a log entry is committed in a given term, then that entry will be present in the logs of the leaders for all higher-numbered terms.
-5. **State Machine Safety**: if a server has applied a log entry at a given index to its state machine, no other server will ever apply a different log entry for the same index.
-
-暂时可以先不看，需要知道的是raft所有的规则都是为了保证上面的这些性质，而这些性质又是保证raft正确的前提。
-
-## Leader选举
-**Election Safety**性质说的在某个term中最多只能选出一个leader。
-有如下这些规则：
-1. raft将时间划分为term，每个term都有一个number，每个term以选举一个leader开始。
-2. 每个server有三种状态：leader, follower, candidate。![states](https://blog-1253119293.cos.ap-beijing.myqcloud.com/6.824/raft/raft-states.png)
-3. 作为follower：有一个称为election timeout的倒计时，如果在倒计时内没有收到有效的AppendEntries RPC，将转换为candidate，增加自己的term number，投自己一票，然后通过RequestVote RPC通知集群中的其他server进行投票。当半数以上的RequestVote RPC返回true后，这个candidate将转换为leader。
-4. 某个server收到RequestVote RPC后如何确定要不要投赞同票？同时满足以下三个条件则投赞同，RequestVote RPC返回成功：
-    1. 在当前周期内还没有投过票
-    2. candidate中term不小于自己的term
-    3. **"选举限制"(这是论文在5.4 Safety这一小节给的一个restriction补充)** ：想要获得投票，candidate的logs必须比当前follower的logs更up-to-date。如何比较两个logs的up-to-date程度？最后一个log entry的term大的更up-to-date， 如果term一样，index越大越up-to-date。（**这一restriction保证了Leader Completeness Property，这个属性说的是：作为leader必须要有已经被commit的log，很容易理解，leader作为log分发的源头，如果leader自己都没办法保证自己的log包含了所有已经commit的log，那么怎么保证其他的follower的log能正确**）
-5. 作为leader：周期性的发送AppendEntries RPC。
-
-## Log拷贝
-### Entry格式
-Logs由Entries组成，每个Entry包含一个term和命令，格式如下：
-![log](
-https://blog-1253119293.cos.ap-beijing.myqcloud.com/6.824/raft/raft-log.png)
-
-### 日志拷贝的过程
-1. leader接收客户端的Entry，将Entry添加自己的logs中。
-2. leader周期性使用AppendEntries RPC将新的entry备份到其它server。
-3. follower收到AppendEntries RPC后做什么？进行**一致性检查**。
-#### 一致性检查
-follower收到AppendEntries RPCs后，会进行一致性检查。
-leader为每个follower维护一个nextIndex变量，新上位的leader的nextIndex初始化为当前logs的最后一个log的index+1。
-
-##### 实例分析
-假设leader的logs为：[index1, term=1, cmd1]，
