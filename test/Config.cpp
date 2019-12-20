@@ -67,29 +67,30 @@ std::shared_ptr<Raft> Config::getRaft(int index) {
 
 //check have one and only one leader in a term
 int Config::checkOnLeader() {
+	//TODO:操作rafts_不是线程安全的
 	for (int iter = 0; iter < 10; ++iter) {
 		int ms = 450 + rand() % 100;
 		usleep(ms * 1000);
 		
-		std::map<uint32_t, std::vector<uint32_t> > leaders;
+		std::map<uint32_t, std::vector<uint32_t> > term_2_leaderid;
 		for (uint32_t idx = 0; idx < n_; ++idx) {
 			if (raft_connected_[idx]) {
 				bool is_leader = rafts_[idx]->isLeader();
 				uint32_t term = rafts_[idx]->term();
 				if (is_leader) {
-					leaders[term].push_back(idx);
+					term_2_leaderid[term].push_back(idx);
 				}
 			}
 		}
 		uint32_t last_term_with_leader = 0;
-		for (const auto& pair : leaders) {
+		for (const auto& pair : term_2_leaderid) {
 			EXPECT_EQ(1, static_cast<int>(pair.second.size()));
 			if (pair.first > last_term_with_leader) {
 				last_term_with_leader = pair.first;
 			}
 		}
-		if (leaders.size() != 0) {
-			return static_cast<int>(leaders[last_term_with_leader][0]);
+		if (term_2_leaderid.size() != 0) {
+			return static_cast<int>(term_2_leaderid[last_term_with_leader][0]);
 		}
 	}
 	EXPECT_TRUE(false);
@@ -108,6 +109,7 @@ void Config::checkNoLeader() {
 
 uint32_t Config::checkTerms() {
 	uint32_t term = 0;
+	//TODO:锁
 	for (uint32_t idx = 0; idx < n_; ++idx) {
 		if (raft_connected_[idx]) {
 			uint32_t xterm = rafts_[idx]->term();

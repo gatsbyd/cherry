@@ -10,7 +10,7 @@ namespace cherry {
 int milli_raft_election_timeout = 1000;
 
 TEST(raft_election_test, TestInitialElection) {
-	Logger::setLogLevel(LogLevel::INFO);
+	//Logger::setLogLevel(LogLevel::INFO);
 	Singleton<Logger>::getInstance()->addAppender("console", LogAppender::ptr(new ConsoleAppender()));
 
 	uint32_t servers = 3;
