@@ -1,5 +1,6 @@
 # 简介
 本项目用C++实现了Raft一致性算法，并在此基础上实现了一个Fault-tolerant Key/Value Service.
+严格来说这里实现的Raft协议是不完整的，日志压缩和成员变更都没有实现。
 
 ## 运行
 本项目依赖我的另一个项目[melon](https://github.com/gatsbyd/melon)
